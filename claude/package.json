@@ -1,0 +1,17 @@
+{
+  "name": "html-editor-claude",
+  "version": "1.0.0",
+  "description": "Claude Code (MCP) build of the html-editor visual editor for HTML and Markdown artifacts",
+  "type": "module",
+  "bin": {
+    "html-editor-mcp": "mcp-server.mjs"
+  },
+  "scripts": {
+    "start": "node mcp-server.mjs"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^3.25.76"
+  }
+}
