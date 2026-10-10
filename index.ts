@@ -1,5 +1,5 @@
 /**
- * html-editor — visual editing for local HTML artifacts from the browser.
+ * retouche — visual editing for local HTML artifacts from the browser.
  *
  * Usage: /edit path/to/file.html
  *
@@ -189,7 +189,7 @@ function snippet(text: string, max = 80): string {
 // (without triggering a turn). Used for direct edits/undo/redo that bypass the agent.
 function notifySession(content: string): void {
   try {
-    piRef?.sendMessage({ customType: "html-editor", content, display: true });
+    piRef?.sendMessage({ customType: "retouche", content, display: true });
   } catch {
     /* session unavailable; ignore */
   }
@@ -542,7 +542,7 @@ async function startServer(filePath: string, ctx: ExtensionCommandContext): Prom
 
   const url = `http://127.0.0.1:${port}/${encodeURIComponent(basename(fullPath))}?t=${token}`;
   openBrowser(url);
-  ctx.ui.notify(`html-editor: editing ${basename(fullPath)} — ${url}`, "info");
+  ctx.ui.notify(`retouche: editing ${basename(fullPath)} — ${url}`, "info");
 }
 
 function broadcast(clients: Set<ServerResponse>, data: string): void {
@@ -913,7 +913,7 @@ export default function (pi: ExtensionAPI) {
       try {
         await startServer(target, ctx);
       } catch (err) {
-        ctx.ui.notify(`html-editor: ${err instanceof Error ? err.message : String(err)}`, "error");
+        ctx.ui.notify(`retouche: ${err instanceof Error ? err.message : String(err)}`, "error");
       }
     },
   });

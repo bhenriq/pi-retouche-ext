@@ -1,6 +1,6 @@
 import { CSS } from "./styles.js";
 /*
- * html-editor browser overlay.
+ * retouche browser overlay.
  * Reads a token from its script URL, attaches an annotation layer to the
  * page, and lets the user send region/text selections back to the pi session.
  * This script NEVER mutates the artifact document; it only annotates it.
