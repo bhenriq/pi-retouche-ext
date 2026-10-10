@@ -2,8 +2,10 @@
 
 This is the Claude Code version of the `retouche` visual editor. It is a
 single **MCP server** that also hosts the localhost HTTP server and browser
-overlay. The browser assets (`../editor.js`, `../assets/*`) are shared with
-the pi build and are not duplicated.
+overlay. It shares rendering + matching logic with the pi build across
+`../lib/*` (bundled into `../lib/engine.mjs`) and serves the same browser
+overlay (`../dist/editor.js`). Both artifacts are committed; regenerate them
+with `npm run build` in the repo root after editing `client/` or `lib/`.
 
 ## Install
 

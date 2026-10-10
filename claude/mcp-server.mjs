@@ -30,6 +30,10 @@ import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import {
+  isMarkdownPath, isMarpFrontmatter, findSourceSpan, locateSelection, slideSourceRegion,
+  renderMarkdownDocument, renderMarpPage,
+} from "../lib/engine.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -50,16 +54,12 @@ async function hashFile(path) {
   }
 }
 
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
 function snippet(text, max = 80) {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > max ? flat.slice(0, max - 1) + "…" : flat;
 }
 
-const isMarkdown = (p) => /\.(md|markdown|mdown|mkd)$/i.test(p);
+const isMarkdown = (p) => isMarkdownPath(p);
 
 const ARTIFACT_EXTS = new Set([".html", ".htm", ".md", ".markdown", ".mdown", ".mkd"]);
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".next", ".cache", "vendor"]);
@@ -101,47 +101,15 @@ async function listArtifacts(root, maxDepth = 3) {
   return out.slice(0, 50);
 }
 
-const MARKDOWN_STYLE = `
-    :root { color-scheme: light; }
-    body { margin: 0; background: #f9fafb; color: #111827;
-      font: 16px/1.7 -apple-system, Segoe UI, Roboto, sans-serif; padding: 48px 24px; }
-    .md-root { max-width: 760px; margin: 0 auto; }
-    .md-root > :first-child { margin-top: 0; }
-    .md-root h1, .md-root h2, .md-root h3 { line-height: 1.25; margin: 1.8em 0 .6em; }
-    .md-root h1 { font-size: 2em; border-bottom: 1px solid #e5e7eb; padding-bottom: .3em; }
-    .md-root h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: .3em; }
-    .md-root h3 { font-size: 1.2em; }
-    .md-root p, .md-root ul, .md-root ol, .md-root blockquote, .md-root pre, .md-root table { margin: 0 0 1em; }
-    .md-root a { color: #4f46e5; }
-    .md-root code { background: #eef2ff; border-radius: 4px; padding: .15em .35em;
-      font: .9em/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .md-root pre { background: #111827; color: #e5e7eb; border-radius: 10px; padding: 14px 16px; overflow: auto; }
-    .md-root pre code { background: none; padding: 0; color: inherit; }
-    .md-root blockquote { margin-left: 0; padding: .2em 1em; border-left: 4px solid #c7d2fe;
-      color: #4b5563; background: #eef2ff66; border-radius: 0 8px 8px 0; }
-    .md-root ul, .md-root ol { padding-left: 1.6em; }
-    .md-root li { margin: .25em 0; }
-    .md-root hr { border: 0; border-top: 1px solid #e5e7eb; margin: 2em 0; }
-    .md-root img { max-width: 100%; border-radius: 8px; }
-    .md-root table { border-collapse: collapse; width: 100%; }
-    .md-root th, .md-root td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; }
-    .md-root th { background: #f3f4f6; }
-  `;
-
-function renderMarkdown(raw, title) {
-  const body = marked.parse(raw, { gfm: true, breaks: false });
-  return `<!doctype html>
-<html lang="en" data-hme-theme="dark">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${esc(title)}</title>
-  <style>${MARKDOWN_STYLE}</style>
-</head>
-<body>
-  <main class="md-root">${body}</main>
-</body>
-</html>`;
+// Markdown/Marp rendering is shared with the pi build via lib/render.ts
+// (bundled into lib/engine.mjs). renderPage resolves the artifact into the
+// HTML the overlay annotates: Marp deck, plain Markdown, or raw HTML.
+async function renderPage(filePath, raw) {
+  if (isMarkdownPath(filePath)) {
+    if (isMarpFrontmatter(raw)) return renderMarpPage(raw, filePath, marked, active.marpCache);
+    return renderMarkdownDocument(raw, basename(filePath), marked);
+  }
+  return raw;
 }
 
 function injectEditor(html, token, md) {
@@ -151,54 +119,8 @@ function injectEditor(html, token, md) {
   return html + tag;
 }
 
-// Approximate match that ignores HTML tags and inline Markdown markers.
-function findSourceSpan(source, needle) {
-  const exact = source.indexOf(needle);
-  if (exact !== -1) return { start: exact, end: exact + needle.length };
-  const map = [];
-  let plain = "";
-  let i = 0;
-  while (i < source.length) {
-    const ch = source[i];
-    if (ch === "<") {
-      const close = source.indexOf(">", i + 1);
-      if (close !== -1) { i = close + 1; continue; }
-    }
-    if (ch === "*" || ch === "_" || ch === "~" || ch === "`") { i++; continue; }
-    plain += ch;
-    map.push(i);
-    i++;
-  }
-  const p = plain.indexOf(needle);
-  if (p === -1) return null;
-  return { start: map[p], end: map[p + needle.length - 1] + 1 };
-}
-
-function locateSelection(source, oldText, anchorText, startOffset) {
-  if (anchorText && startOffset >= 0) {
-    const span = findSourceSpan(source, anchorText);
-    if (span) {
-      const map = [];
-      let plain = "";
-      let i = span.start;
-      while (i < span.end) {
-        const ch = source[i];
-        if (ch === "<") {
-          const close = source.indexOf(">", i + 1);
-          if (close !== -1) { i = close + 1; continue; }
-        }
-        if (ch === "*" || ch === "_" || ch === "~" || ch === "`") { i++; continue; }
-        plain += ch;
-        map.push(i);
-        i++;
-      }
-      if (startOffset + oldText.length <= map.length && plain.slice(startOffset, startOffset + oldText.length) === oldText) {
-        return { start: map[startOffset], end: map[startOffset + oldText.length - 1] + 1 };
-      }
-    }
-  }
-  return findSourceSpan(source, oldText);
-}
+// findSourceSpan / locateSelection / slideSourceRegion are shared with the
+// pi build (lib/matching.ts, bundled into lib/engine.mjs).
 
 // ---------------------------------------------------------------------------
 // Artifact server (shared with the pi build in spirit)
@@ -269,8 +191,14 @@ async function handleHttp(req, res) {
   if ((pathname === "/" || pathname === artifactPath) && req.method === "GET") {
     const raw = await readFile(active.path, "utf8").catch(() => null);
     if (raw === null) return sendJson(res, 404, { error: "artifact unavailable" });
-    const page = active.markdown ? renderMarkdown(raw, basename(active.path)) : raw;
     res.setHeader("Set-Cookie", `hme_token=${active.token}; HttpOnly; SameSite=Lax; Path=/`);
+    // Keep the token out of the address bar once the cookie is set.
+    if (u.searchParams.has("t")) {
+      res.writeHead(302, { Location: artifactPath });
+      res.end();
+      return;
+    }
+    const page = await renderPage(active.path, raw);
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     return res.end(injectEditor(page, active.token, active.markdown));
   }
@@ -278,14 +206,14 @@ async function handleHttp(req, res) {
   if (pathname === "/__source" && req.method === "GET") {
     const raw = await readFile(active.path, "utf8").catch(() => null);
     if (raw === null) return sendJson(res, 404, { error: "artifact unavailable" });
-    const page = active.markdown ? renderMarkdown(raw, basename(active.path)) : raw;
+    const page = await renderPage(active.path, raw);
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     return res.end(page);
   }
 
   if (pathname === "/__editor/editor.js" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" });
-    return res.end(await readFile(join(ROOT, "editor.js"), "utf8"));
+    return res.end(await readFile(join(ROOT, "dist", "editor.js"), "utf8"));
   }
 
   if (pathname === "/__editor/html-to-image.js" && req.method === "GET") {
@@ -326,12 +254,29 @@ async function handleHttp(req, res) {
     const newText = typeof body.newText === "string" ? body.newText : "";
     const anchorText = typeof body.anchorText === "string" ? body.anchorText : "";
     const startOffset = typeof body.startOffset === "number" ? body.startOffset : -1;
+    const slide = typeof body.slide === "number" ? body.slide : -1;
     if (!oldText) return sendJson(res, 400, { error: "oldText required" });
     let content;
     try { content = await readFile(active.path, "utf8"); } catch { return sendJson(res, 404, { error: "artifact unavailable" }); }
-    const span = locateSelection(content, oldText, anchorText, startOffset);
+
+    // Prefer the slide-scoped match (e.g. a slide title that also appears as a
+    // prefix of a frontmatter header), falling back to the whole file.
+    let search = content;
+    let offset = 0;
+    if (slide >= 0) {
+      const region = slideSourceRegion(content, slide);
+      if (region) { search = content.slice(region.start, region.end); offset = region.start; }
+    }
+    let span = locateSelection(search, oldText, anchorText, startOffset);
+    if (!span && offset !== 0) {
+      search = content;
+      offset = 0;
+      span = locateSelection(search, oldText, anchorText, startOffset);
+    }
     if (!span) return sendJson(res, 409, { error: "selected text wasn't found in the source; use a free instruction instead" });
-    const updated = content.slice(0, span.start) + newText + content.slice(span.end);
+    const absStart = span.start + offset;
+    const absEnd = span.end + offset;
+    const updated = content.slice(0, absStart) + newText + content.slice(absEnd);
     try { await writeFile(active.path, updated, "utf8"); } catch (err) { return sendJson(res, 500, { error: String(err?.message || err) }); }
     enqueueSubmit({ type: "notice", message: `User applied a direct edit to ${basename(active.path)} (no AI): "${snippet(oldText)}" → "${snippet(newText)}".` });
     return sendJson(res, 200, { ok: true });
@@ -350,6 +295,8 @@ async function handleHttp(req, res) {
       selector: body.selector,
       anchorHtml: body.anchorHtml,
       rect: body.rect,
+      slide: typeof body.slide === "number" ? body.slide : -1,
+      slideTotal: typeof body.slideTotal === "number" ? body.slideTotal : 0,
     };
     enqueueSubmit(item);
     return sendJson(res, 200, { ok: true });
@@ -396,6 +343,7 @@ async function startArtifact(filePath) {
     path: fullPath, dir, token, port, server, clients,
     rawHash: hash(initial), versions: [initial], vIndex: 0,
     markdown: isMarkdown(fullPath),
+    marpCache: {},
     keepalive: setInterval(() => broadcast(": ping\n\n"), 25000),
   };
 
