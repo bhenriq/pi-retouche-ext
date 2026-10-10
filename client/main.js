@@ -1,5 +1,6 @@
+import { CSS } from "./styles.js";
 /*
- * html-editor browser overlay.
+ * retouche browser overlay.
  * Reads a token from its script URL, attaches an annotation layer to the
  * page, and lets the user send region/text selections back to the pi session.
  * This script NEVER mutates the artifact document; it only annotates it.
@@ -25,6 +26,7 @@
   }
 
   var mode = "text";
+  document.documentElement.setAttribute("data-hme-mode", mode);
   var busy = false;
   var dragging = false;
   var startX = 0;
@@ -33,79 +35,7 @@
   var pendingCaptureEl = null;
   var popoverLoc = { x: 0, y: 0 };
 
-  var CSS = [
-    "[data-hme-overlay]{position:fixed;inset:0;pointer-events:none;z-index:2147483000;font:13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif}",
-    "[data-hme-overlay] [hidden]{display:none!important}",
-    "[data-hme-editor]{box-sizing:border-box;pointer-events:auto}",
-    ".hme-box,.hme-toast{pointer-events:none!important}",
-    ".hme-toolbar{position:fixed;top:12px;right:12px;display:flex;gap:4px;background:#111827;padding:4px;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.35)}",
-    ".hme-btn{color:#d1d5db;background:transparent;border:0;padding:6px 10px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600}",
-    ".hme-btn:hover{color:#fff;background:#1f2937}",
-    ".hme-btn.active{color:#fff;background:#4f46e5}",
-    ".hme-mode{display:flex;align-items:center;justify-content:center;padding:6px 9px}",
-    ".hme-mode .hme-icon{width:16px;height:16px;display:none}",
-    ".hme-mode[data-mode='rect'] .hme-icon-rect{display:block}",
-    ".hme-mode[data-mode='text'] .hme-icon-text{display:block}",
-    ".hme-btn:disabled{opacity:.35;cursor:default}",
-    ".hme-btn:disabled:hover{color:#d1d5db;background:transparent}",
-    ".hme-box{position:fixed;border:2px solid #6366f1;background:rgba(99,102,241,.12);border-radius:3px}",
-    ".hme-popover{position:fixed;width:320px;max-width:calc(100vw - 16px);background:#fff;color:#111827;border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,.35);padding:10px}",
-    ".hme-popover textarea{width:100%;height:72px;resize:vertical;border:1px solid #d1d5db;border-radius:6px;padding:8px;font:inherit;color:#111827}",
-    ".hme-popover textarea:focus{outline:2px solid #6366f1;outline-offset:-1px}",
-    ".hme-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:8px}",
-    ".hme-cancel{color:#374151;background:#f3f4f6;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600}",
-    ":root[data-hme-theme='dark'] .hme-popover{background:#111111;color:#e5e7eb;box-shadow:0 10px 30px rgba(0,0,0,.6)}",
-    ":root[data-hme-theme='dark'] .hme-popover textarea{background:#0b0b0b;color:#e5e7eb;border-color:#333333}",
-    ":root[data-hme-theme='dark'] .hme-cancel{color:#e5e7eb;background:#262626}",
-    ".hme-send{color:#fff;background:#4f46e5;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600}",
-    ".hme-send:disabled{opacity:.5;cursor:default}",
-    ".hme-quick{position:fixed;display:flex;gap:4px;background:#111827;padding:4px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.4)}",
-    ".hme-qbtn{color:#e5e7eb;background:transparent;border:0;padding:6px 9px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600}",
-    ".hme-qbtn:hover{background:#374151;color:#fff}",
-    ".hme-qcancel{color:#9ca3af}",
-    ".hme-explain{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 32px));max-height:75vh;display:flex;flex-direction:column;overflow:hidden;background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.45)}",
-    ".hme-explain-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 10px 10px 18px;border-bottom:1px solid #e5e7eb;font:600 14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif}",
-    ".hme-explain-x{background:transparent;border:0;color:#6b7280;font-size:22px;line-height:1;padding:0 8px;border-radius:6px;cursor:pointer}",
-    ".hme-explain-x:hover{background:#f3f4f6;color:#111827}",
-    ".hme-explain-body{white-space:normal;font:14px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;padding:16px 20px;overflow-y:auto;flex:1 1 auto;min-height:0}",
-    ".hme-explain-body > :first-child{margin-top:0}",
-    ".hme-explain-body > :last-child{margin-bottom:0}",
-    ".hme-explain-body h1,.hme-explain-body h2,.hme-explain-body h3{line-height:1.25;margin:1.1em 0 .5em}",
-    ".hme-explain-body h1{font-size:1.35em}",
-    ".hme-explain-body h2{font-size:1.2em}",
-    ".hme-explain-body h3{font-size:1.05em}",
-    ".hme-explain-body p,.hme-explain-body ul,.hme-explain-body ol,.hme-explain-body pre,.hme-explain-body blockquote{margin:0 0 .9em}",
-    ".hme-explain-body ul,.hme-explain-body ol{padding-left:1.4em}",
-    ".hme-explain-body li{margin:.2em 0}",
-    ".hme-explain-body code{background:rgba(127,127,127,.2);border-radius:4px;padding:.1em .35em;font:.9em/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}",
-    ".hme-explain-body pre{background:rgba(127,127,127,.16);border-radius:8px;padding:10px 12px;overflow:auto}",
-    ".hme-explain-body pre code{background:none;padding:0}",
-    ".hme-explain-body a{color:#818cf8}",
-    ".hme-explain-body blockquote{margin-left:0;padding:.2em .8em;border-left:3px solid rgba(127,127,127,.5);opacity:.9}",
-    ".hme-explain-foot{display:flex;justify-content:flex-end;padding:10px 16px;border-top:1px solid #e5e7eb;flex:0 0 auto}",
-    ".hme-explain-close{color:#374151;background:#f3f4f6;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600}",
-    ":root[data-hme-theme='dark'] .hme-explain{background:#111111;color:#e5e7eb;box-shadow:0 20px 60px rgba(0,0,0,.7)}",
-    ":root[data-hme-theme='dark'] .hme-explain-head{border-bottom-color:#262626}",
-    ":root[data-hme-theme='dark'] .hme-explain-foot{border-top-color:#262626}",
-    ":root[data-hme-theme='dark'] .hme-explain-x{color:#9ca3af}",
-    ":root[data-hme-theme='dark'] .hme-explain-x:hover{background:#262626;color:#e5e7eb}",
-    ":root[data-hme-theme='dark'] .hme-explain-close{color:#e5e7eb;background:#262626}",
-    ".hme-theme{display:flex;align-items:center;justify-content:center;padding:6px 9px}",
-    ".hme-theme .hme-icon{width:16px;height:16px;display:none}",
-    ":root[data-hme-theme='dark'] .hme-theme .hme-icon-sun{display:block}",
-    ":root:not([data-hme-theme='dark']) .hme-theme .hme-icon-moon{display:block}",
-    "html.hme-generic[data-hme-theme='dark']{background:#000}",
-    "html.hme-generic[data-hme-theme='dark'] body{background:#000}",
-    "html.hme-generic[data-hme-theme='dark'] body > *:not([data-hme-overlay]){filter:invert(1) hue-rotate(180deg)}",
-    "html.hme-generic[data-hme-theme='dark'] body > *:not([data-hme-overlay]) img,html.hme-generic[data-hme-theme='dark'] body > *:not([data-hme-overlay]) svg,html.hme-generic[data-hme-theme='dark'] body > *:not([data-hme-overlay]) video,html.hme-generic[data-hme-theme='dark'] body > *:not([data-hme-overlay]) canvas{filter:invert(1) hue-rotate(180deg)}",
-    ".hme-pin{position:fixed;width:26px;height:26px;border-radius:50%;background:#4f46e5;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.35);cursor:pointer}",
-    ".hme-spin{width:12px;height:12px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:hme-spin .7s linear infinite}",
-    "@keyframes hme-spin{to{transform:rotate(360deg)}}",
-    ".hme-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .15s;max-width:80vw}",
-    ".hme-toast.show{opacity:1}",
-    ".hme-toast.error{background:#b91c1c}",
-    "body.hme-dragging,body.hme-dragging *{user-select:none!important;-webkit-user-select:none!important}",
-  ].join("\n");
+
 
   var styleEl = document.createElement("style");
   styleEl.setAttribute("data-hme-editor", "");
@@ -116,13 +46,14 @@
   root.setAttribute("data-hme-overlay", "");
   root.innerHTML =
     '<div class="hme-toolbar" data-hme-editor>' +
-    '<button class="hme-btn hme-mode" data-action="mode" data-mode="text" title="Toggle selection mode (region / text)" aria-label="Toggle selection mode">' +
+    '<button class="hme-btn hme-mode" data-action="mode" data-mode="text" title="Toggle selection mode (region / text / node) [T]" aria-label="Toggle selection mode">' +
     '<svg class="hme-icon hme-icon-rect" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke-dasharray="3 2"/></svg>' +
     '<svg class="hme-icon hme-icon-text" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h12v3.2h-1.2c-.3-1.3-.8-1.7-2.2-1.7H9.2v8.4c0 1.2.2 1.4 1.6 1.6V15H5.2v-1.5c1.4-.2 1.6-.4 1.6-1.6V3.5H5.4c-1.4 0-1.9.4-2.2 1.7H2V2z"/></svg>' +
+    '<svg class="hme-icon hme-icon-node" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg>' +
     '</button>' +
-    '<button class="hme-btn" data-action="undo" title="Undo last file change" disabled>\u21b6</button>' +
-    '<button class="hme-btn" data-action="redo" title="Redo" disabled>\u21b7</button>' +
-    '<button class="hme-btn hme-theme" data-action="theme" title="Toggle dark / light">' +
+    '<button class="hme-btn" data-action="undo" title="Undo last file change [Z]" disabled>\u21b6</button>' +
+    '<button class="hme-btn" data-action="redo" title="Redo [Y]" disabled>\u21b7</button>' +
+    '<button class="hme-btn hme-theme" data-action="theme" title="Toggle dark / light [B]">' +
     '<svg class="hme-icon hme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.8A5.8 5.8 0 0 1 6.2 2.5a6 6 0 1 0 7.3 7.3z"/></svg>' +
     '<svg class="hme-icon hme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M2.9 2.9l1.1 1.1M12 12l1.1 1.1M13.1 2.9L12 4M4 12l-1.1 1.1"/></svg>' +
     "</button>" +
@@ -130,7 +61,7 @@
     '<div class="hme-box" data-hme-editor hidden></div>' +
     '<div class="hme-popover" data-hme-editor hidden>' +
     '<textarea placeholder="What should I change here?"></textarea>' +
-    '<div class="hme-actions"><button class="hme-cancel">Cancel</button><button class="hme-explain-btn" hidden>Explain</button><button class="hme-send">Send</button></div>' +
+    '<div class="hme-actions"><span class="hme-hint">\u2318\u21b5 to send</span><button class="hme-send" title="Send" aria-label="Send"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 1.5 7.5 14.5 6 9 1.5 7.5z"/><path d="m14.5 1.5-7 7"/></svg></button></div>' +
     "</div>" +
     '<div class="hme-quick" data-hme-editor hidden>' +
     '<button class="hme-qbtn" data-quick="remove">Remove</button>' +
@@ -139,12 +70,15 @@
     '<button class="hme-qbtn" data-quick="edit">Edit</button>' +
     '<button class="hme-qbtn" data-quick="other">Other</button>' +
     '<button class="hme-qbtn" data-quick="explain">Explain</button>' +
-    '<button class="hme-qbtn hme-qcancel" data-quick="cancel">Cancel</button>' +
     "</div>" +
     '<div class="hme-explain" data-hme-editor hidden>' +
     '<div class="hme-explain-head"><span>Explanation</span><button class="hme-explain-x" aria-label="Close">\u00d7</button></div>' +
     '<div class="hme-explain-body"></div>' +
-    '<div class="hme-explain-foot"><button class="hme-explain-close">Close</button></div>' +
+    "</div>" +
+    '<div class="hme-deck" data-hme-editor hidden>' +
+    '<button class="hme-deck-prev" aria-label="Previous slide">\u2039</button>' +
+    '<span class="hme-deck-pos"></span>' +
+    '<button class="hme-deck-next" aria-label="Next slide">\u203a</button>' +
     "</div>" +
     '<div class="hme-pin" data-hme-editor hidden><span class="hme-spin"></span></div>' +
     '<div class="hme-toast" data-hme-editor hidden></div>';
@@ -153,25 +87,31 @@
   var toolbar = root.querySelector(".hme-toolbar");
   var undoBtn = toolbar.querySelector('[data-action="undo"]');
   var redoBtn = toolbar.querySelector('[data-action="redo"]');
+  var themeBtn = toolbar.querySelector('[data-action="theme"]');
   var box = root.querySelector(".hme-box");
   var popover = root.querySelector(".hme-popover");
   var quick = root.querySelector(".hme-quick");
   var textarea = root.querySelector("textarea");
-  var cancelBtn = root.querySelector(".hme-cancel");
   var sendBtn = root.querySelector(".hme-send");
-  var explainBtn = root.querySelector(".hme-explain-btn");
   var explain = root.querySelector(".hme-explain");
   var explainBody = root.querySelector(".hme-explain-body");
-  var explainClose = root.querySelector(".hme-explain-close");
   var explainX = root.querySelector(".hme-explain-x");
   var pin = root.querySelector(".hme-pin");
   var toast = root.querySelector(".hme-toast");
+  var deck = root.querySelector(".hme-deck");
+  var deckPos = root.querySelector(".hme-deck-pos");
+  var deckPrev = root.querySelector(".hme-deck-prev");
+  var deckNext = root.querySelector(".hme-deck-next");
 
   var toastTimer = null;
   var settleGraceTimer = null;
   var watchdogTimer = null;
   var popoverMode = "instruction";
   var pendingEditOld = "";
+  var nodePaused = false;
+  var deckSlides = [];
+  var deckIndex = 0;
+  var isDeck = false;
 
   // -------------------------------------------------------------------------
   // DOM helpers (all editor-owned nodes are stripped from any capture)
@@ -295,10 +235,16 @@
     return Math.max(8, Math.min(y, window.innerHeight - 120));
   }
 
+  function autoGrow() {
+    textarea.style.height = "auto";
+    textarea.style.height = Math.min(textarea.scrollHeight || 44, 220) + "px";
+  }
+
   function openPopover(x, y) {
     popover.hidden = false;
     popover.style.left = clampX(x) + "px";
     popover.style.top = clampY(y) + "px";
+    autoGrow();
     textarea.focus();
   }
 
@@ -318,8 +264,9 @@
 
   function openInstruction() {
     popoverMode = "instruction";
-    sendBtn.textContent = "Send";
-    if (explainBtn) explainBtn.hidden = false;
+    sendBtn.title = "Send";
+    sendBtn.setAttribute("aria-label", "Send");
+    textarea.value = "";
     textarea.placeholder = "What should I change here?";
     openPopover(popoverLoc.x, popoverLoc.y);
   }
@@ -327,8 +274,8 @@
   function openEdit() {
     popoverMode = "edit";
     pendingEditOld = pending && pending.text ? pending.text : "";
-    sendBtn.textContent = "Replace";
-    if (explainBtn) explainBtn.hidden = true;
+    sendBtn.title = "Replace";
+    sendBtn.setAttribute("aria-label", "Replace");
     textarea.placeholder = "New text";
     textarea.value = pendingEditOld;
     openPopover(popoverLoc.x, popoverLoc.y);
@@ -396,6 +343,47 @@
     pin.hidden = false;
   }
 
+  function slideOf(el) {
+    if (!deckSlides.length || !el) return -1;
+    for (var k = 0; k < deckSlides.length; k++) {
+      if (deckSlides[k].contains(el)) return k;
+    }
+    return -1;
+  }
+
+  function showSlide(i) {
+    if (!deckSlides.length) return;
+    deckIndex = Math.max(0, Math.min(i, deckSlides.length - 1));
+    for (var k = 0; k < deckSlides.length; k++) {
+      deckSlides[k].classList.toggle("hme-slide-active", k === deckIndex);
+    }
+    deckPos.textContent = deckIndex + 1 + " / " + deckSlides.length;
+  }
+
+  function changeSlide(delta) {
+    showSlide(deckIndex + delta);
+    hideQuick();
+    closePopover();
+    pending = null;
+    pendingCaptureEl = null;
+  }
+
+  function initDeck() {
+    deckSlides = Array.prototype.slice.call(document.querySelectorAll("svg[data-marpit-svg]"));
+    // Marp decks carry their own theme (theme: ... in frontmatter). Don't offer
+    // a dark/light toggle here — respect the deck's theme instead.
+    isDeck = deckSlides.length > 0;
+    themeBtn.hidden = isDeck;
+    themeBtn.title = isDeck ? "This deck uses its own Marp theme" : "Toggle dark / light [B]";
+    if (!deckSlides.length) {
+      deck.hidden = true;
+      return;
+    }
+    if (deckIndex >= deckSlides.length) deckIndex = 0;
+    deck.hidden = false;
+    showSlide(deckIndex);
+  }
+
   function settle() {
     busy = false;
     pending = null;
@@ -404,7 +392,8 @@
     popoverMode = "instruction";
     pin.hidden = true;
     sendBtn.disabled = false;
-    sendBtn.textContent = "Send";
+    sendBtn.title = "Send";
+    sendBtn.setAttribute("aria-label", "Send");
     textarea.placeholder = "What should I change here?";
     clearTimeout(settleGraceTimer);
     clearTimeout(watchdogTimer);
@@ -535,6 +524,26 @@
     openQuick(popoverLoc.x, popoverLoc.y);
   }
 
+  function finishNode(el) {
+    nodePaused = true;
+    var r = el.getBoundingClientRect();
+    var tc = el.textContent || "";
+    var trimmed = tc.trim();
+    var lead = tc.length - tc.replace(/^\s+/, "").length;
+    pending = {
+      mode: "node",
+      text: trimmed || undefined,
+      anchorText: tc,
+      startOffset: trimmed ? lead : -1,
+      anchorHtml: captureHtml(el),
+      selector: cssPath(el) || undefined,
+      primaryRect: rectOf(r),
+    };
+    pendingCaptureEl = el;
+    popoverLoc = { x: r.left, y: r.bottom + 8 };
+    openQuick(popoverLoc.x, popoverLoc.y);
+  }
+
   // -------------------------------------------------------------------------
   // Capture + submit
   // -------------------------------------------------------------------------
@@ -598,6 +607,8 @@
       anchorHtml: pending.anchorHtml,
       selector: pending.selector,
       primaryRect: pending.primaryRect,
+      slide: pendingCaptureEl ? slideOf(pendingCaptureEl) : -1,
+      slideTotal: deckSlides.length,
       imageDataUrl: null,
     };
 
@@ -613,7 +624,7 @@
     }, 180000);
 
     var work = Promise.resolve();
-    if (payload.mode === "rect") {
+    if (payload.mode === "rect" || payload.mode === "node") {
       work = captureRegion().then(function (dataUrl) {
         payload.imageDataUrl = dataUrl;
       });
@@ -648,6 +659,7 @@
     var newText = textarea.value;
     var anchorText = pending.anchorText;
     var startOffset = pending.startOffset;
+    var slide = pendingCaptureEl ? slideOf(pendingCaptureEl) : -1;
     busy = true;
     closePopover();
     hideQuick();
@@ -663,7 +675,7 @@
     fetch("/__replace?t=" + encodeURIComponent(TOKEN), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ oldText: oldText, newText: newText, anchorText: anchorText, startOffset: startOffset }),
+      body: JSON.stringify({ oldText: oldText, newText: newText, anchorText: anchorText, startOffset: startOffset, slide: slide }),
     })
       .then(function (res) {
         return res
@@ -692,13 +704,16 @@
   // Refresh (file changed on disk → re-render, preserving the overlay)
   // -------------------------------------------------------------------------
 
+  var applySeq = 0;
   function applySource() {
+    var seq = ++applySeq;
     fetch("/__source?t=" + encodeURIComponent(TOKEN))
       .then(function (res) {
         if (!res.ok) throw new Error("source refused (" + res.status + ")");
         return res.text();
       })
       .then(function (raw) {
+        if (seq !== applySeq) return; // a newer applySource superseded this one
         var doc = new DOMParser().parseFromString(raw, "text/html");
 
         // Reconcile <head> while keeping any editor-owned nodes.
@@ -721,6 +736,7 @@
         document.body.appendChild(overlay);
 
         settle();
+        initDeck();
       })
       .catch(function () {
         /* transient failure; the SSE retry will re-trigger */
@@ -751,6 +767,33 @@
   // Event wiring
   // -------------------------------------------------------------------------
 
+  // Single place that changes the selection mode and resets transient state.
+  function setMode(next) {
+    mode = next;
+    document.documentElement.setAttribute("data-hme-mode", mode);
+    var mb = toolbar.querySelector(".hme-mode");
+    if (mb) mb.setAttribute("data-mode", mode);
+    box.hidden = true;
+    dragging = false;
+    nodePaused = false;
+  }
+
+  function cycleMode() {
+    setMode(mode === "rect" ? "text" : mode === "text" ? "node" : "rect");
+  }
+
+  function toggleTheme() {
+    if (isDeck) return;
+    var isDark = document.documentElement.getAttribute("data-hme-theme") === "dark";
+    var next = isDark ? "light" : "dark";
+    document.documentElement.setAttribute("data-hme-theme", next);
+    try {
+      localStorage.setItem("hme-theme", next);
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   toolbar.addEventListener("click", function (e) {
     var btn = e.target.closest(".hme-btn");
     if (!btn || btn.disabled) return;
@@ -760,19 +803,39 @@
       return;
     }
     if (action === "mode") {
-      mode = mode === "rect" ? "text" : "rect";
-      btn.setAttribute("data-mode", mode);
+      cycleMode();
       return;
     }
     if (action === "theme") {
-      var isDark = document.documentElement.getAttribute("data-hme-theme") === "dark";
-      var next = isDark ? "light" : "dark";
-      document.documentElement.setAttribute("data-hme-theme", next);
-      try {
-        localStorage.setItem("hme-theme", next);
-      } catch (e) {
-        /* ignore */
-      }
+      toggleTheme();
+      return;
+    }
+  });
+
+  // Keyboard shortcuts: T selection mode, B background, Z undo, Y redo.
+  document.addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var el = e.target;
+    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+    var key = e.key ? e.key.toLowerCase() : "";
+    if (key === "t") {
+      cycleMode();
+      e.preventDefault();
+    } else if (key === "b") {
+      toggleTheme();
+      e.preventDefault();
+    } else if (key === "z") {
+      historyAction("undo");
+      e.preventDefault();
+    } else if (key === "y") {
+      historyAction("redo");
+      e.preventDefault();
+    } else if (deckSlides.length && (key === "arrowright" || key === "arrowdown" || key === "pagedown")) {
+      changeSlide(1);
+      e.preventDefault();
+    } else if (deckSlides.length && (key === "arrowleft" || key === "arrowup" || key === "pageup")) {
+      changeSlide(-1);
+      e.preventDefault();
     }
   });
 
@@ -783,16 +846,20 @@
     pendingCaptureEl = null;
   });
 
+  // Clicking anywhere outside the quick-action bar dismisses the selection.
+  document.addEventListener("pointerdown", function (e) {
+    if (quick.hidden) return;
+    if (quick.contains(e.target)) return;
+    hideQuick();
+    pending = null;
+    pendingCaptureEl = null;
+  });
+
   quick.addEventListener("click", function (e) {
     var b = e.target.closest(".hme-qbtn");
     if (!b) return;
     var kind = b.getAttribute("data-quick");
     hideQuick();
-    if (kind === "cancel") {
-      pending = null;
-      pendingCaptureEl = null;
-      return;
-    }
     if (kind === "edit") {
       openEdit();
       return;
@@ -802,15 +869,22 @@
       return;
     }
     if (kind === "explain") {
-      textarea.value = "Explain the selected text.";
+      textarea.value = "Explain the selected content.";
       submit("explain");
       return;
     }
+    var isNode = pending && pending.mode === "node";
     var instruction =
       kind === "remove"
-        ? "Remove the selected text."
+        ? isNode
+          ? "Remove the selected element."
+          : "Remove the selected text."
         : kind === "less"
-        ? "Say the same thing in a shorter way."
+        ? isNode
+          ? "Make the selected element's content shorter."
+          : "Say the same thing in a shorter way."
+        : isNode
+        ? "Make the selected element's content longer and more detailed."
         : "Say the same thing with more detail.";
     textarea.value = instruction;
     submit("edit");
@@ -822,6 +896,7 @@
       if (mode !== "rect" || e.button !== 0) return;
       if (isEditorNode(e.target)) return;
       dragging = true;
+      e.preventDefault();
       startX = e.clientX;
       startY = e.clientY;
       box.hidden = false;
@@ -831,8 +906,36 @@
     true
   );
 
+  // Stop images/links from being natively dragged while drawing a region.
+  document.addEventListener("dragstart", function (e) {
+    if (dragging) e.preventDefault();
+  }, true);
+
   window.addEventListener("pointermove", function (e) {
-    if (dragging) updateBox(e.clientX, e.clientY);
+    if (dragging) {
+      updateBox(e.clientX, e.clientY);
+      return;
+    }
+    if (mode !== "node") return;
+    if (nodePaused || !popover.hidden || !quick.hidden) {
+      box.hidden = true;
+      return;
+    }
+    if (isEditorNode(e.target)) {
+      box.hidden = true;
+      return;
+    }
+    var el = elementOf(e.target);
+    if (!el || el === document.documentElement || el === document.body) {
+      box.hidden = true;
+      return;
+    }
+    var r = el.getBoundingClientRect();
+    box.hidden = false;
+    box.style.left = r.left + "px";
+    box.style.top = r.top + "px";
+    box.style.width = r.width + "px";
+    box.style.height = r.height + "px";
   });
 
   window.addEventListener("pointerup", function (e) {
@@ -857,6 +960,8 @@
     true
   );
 
+  textarea.addEventListener("input", autoGrow);
+
   textarea.addEventListener("keydown", function (e) {
     if (e.key === "Escape") {
       closePopover();
@@ -868,7 +973,24 @@
     }
   });
 
-  cancelBtn.addEventListener("click", function () {
+  // Node mode: clicking an element selects that element.
+  document.addEventListener("click", function (e) {
+    if (mode !== "node" || e.button !== 0) return;
+    if (isEditorNode(e.target)) return;
+    if (nodePaused) {
+      nodePaused = false;
+      return;
+    }
+    var el = elementOf(e.target);
+    if (!el || el === document.documentElement || el === document.body) return;
+    box.hidden = true;
+    finishNode(el);
+  });
+
+  // Clicking outside the popover dismisses it (replaces the old Cancel button).
+  document.addEventListener("pointerdown", function (e) {
+    if (popover.hidden) return;
+    if (popover.contains(e.target)) return;
     closePopover();
     hideQuick();
     popoverMode = "instruction";
@@ -880,18 +1002,15 @@
     submit("edit");
   });
 
-  if (explainBtn) {
-    explainBtn.addEventListener("click", function () {
-      submit("explain");
-    });
-  }
-
-  explainClose.addEventListener("click", function () {
+  explainX.addEventListener("click", function () {
     explain.hidden = true;
   });
 
-  explainX.addEventListener("click", function () {
-    explain.hidden = true;
+  deckPrev.addEventListener("click", function () {
+    changeSlide(-1);
+  });
+  deckNext.addEventListener("click", function () {
+    changeSlide(1);
   });
 
   pin.title = "Waiting for the agent — click to stop";
@@ -899,4 +1018,5 @@
 
   connect();
   refreshHistory();
+  initDeck();
 })();
