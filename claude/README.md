@@ -1,6 +1,6 @@
-# html-editor · Claude build
+# retouche · Claude build
 
-This is the Claude Code version of the `html-editor` visual editor. It is a
+This is the Claude Code version of the `retouche` visual editor. It is a
 single **MCP server** that also hosts the localhost HTTP server and browser
 overlay. The browser assets (`../editor.js`, `../assets/*`) are shared with
 the pi build and are not duplicated.
@@ -12,7 +12,7 @@ cd claude
 npm install
 
 # Register the MCP server with Claude Code
-claude mcp add html-editor -- node "$(pwd)/mcp-server.mjs"
+claude mcp add retouche -- node "$(pwd)/mcp-server.mjs"
 ```
 
 Restart Claude Code, then confirm it's connected: `claude mcp list`.
@@ -22,7 +22,7 @@ Restart Claude Code, then confirm it's connected: `claude mcp list`.
 1. Start by asking Claude to open a file:
 
    ```
-   Use the html-editor tools: call open with path example.html, then keep
+   Use the retouche tools: call open with path example.html, then keep
    calling next_request until I tell you to stop.
    ```
 

@@ -3,7 +3,7 @@ description: Open an HTML or Markdown artifact in the visual editor and apply se
 argument-hint: [path]
 ---
 
-Start the visual editing loop using the `html-editor` MCP tools.
+Start the visual editing loop using the `retouche` MCP tools.
 
 First, open a file:
 - If an argument was provided, use it as the path: `$ARGUMENTS`

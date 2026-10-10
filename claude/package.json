@@ -1,10 +1,10 @@
 {
-  "name": "html-editor-claude",
+  "name": "retouche-claude",
   "version": "1.0.0",
-  "description": "Claude Code (MCP) build of the html-editor visual editor for HTML and Markdown artifacts",
+  "description": "Claude Code (MCP) build of the retouche visual editor for HTML and Markdown artifacts",
   "type": "module",
   "bin": {
-    "html-editor-mcp": "mcp-server.mjs"
+    "retouche-mcp": "mcp-server.mjs"
   },
   "scripts": {
     "start": "node mcp-server.mjs"

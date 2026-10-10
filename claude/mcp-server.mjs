@@ -1,5 +1,5 @@
 /*
- * html-editor (Claude / MCP build)
+ * retouche (Claude / MCP build)
  *
  * A single MCP server that also hosts the localhost HTTP server + browser
  * overlay. The browser assets (editor.js, marked.umd.js, html-to-image.js)
@@ -470,7 +470,7 @@ function notifyBrowser(content) {
   broadcast(`data: ${JSON.stringify({ type: "settled", kind: "explain", edited: false, reply: content, replyHtml })}\n\n`);
 }
 
-const server = new McpServer({ name: "html-editor", version: "1.0.0" });
+const server = new McpServer({ name: "retouche", version: "1.0.0" });
 
 server.registerTool(
   "open",
@@ -528,6 +528,6 @@ server.registerTool(
 try {
   await server.connect(new StdioServerTransport());
 } catch (err) {
-  console.error("html-editor mcp failed to start:", err);
+  console.error("retouche mcp failed to start:", err);
   process.exit(1);
 }
