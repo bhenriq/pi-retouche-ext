@@ -296,8 +296,8 @@ async function handleHttp(req, res) {
       selector: isGeneral ? null : body.selector,
       anchorHtml: isGeneral ? null : body.anchorHtml,
       rect: isGeneral ? null : body.rect,
-      slide: isGeneral ? -1 : typeof body.slide === "number" ? body.slide : -1,
-      slideTotal: isGeneral ? 0 : typeof body.slideTotal === "number" ? body.slideTotal : 0,
+      slide: typeof body.slide === "number" ? body.slide : -1,
+      slideTotal: typeof body.slideTotal === "number" ? body.slideTotal : 0,
     };
     enqueueSubmit(item);
     return sendJson(res, 200, { ok: true });

@@ -52,7 +52,7 @@ import { CSS } from "./styles.js";
     '<svg class="hme-icon hme-icon-text" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h12v3.2h-1.2c-.3-1.3-.8-1.7-2.2-1.7H9.2v8.4c0 1.2.2 1.4 1.6 1.6V15H5.2v-1.5c1.4-.2 1.6-.4 1.6-1.6V3.5H5.4c-1.4 0-1.9.4-2.2 1.7H2V2z"/></svg>' +
     '<svg class="hme-icon hme-icon-node" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg>' +
     '</button>' +
-    '<button class="hme-btn hme-comment" data-action="comment" title="Comment on the whole document [C]" aria-label="Comment on the whole document">' +
+    '<button class="hme-btn hme-comment" data-action="comment" title="Comment [C]" aria-label="Comment">' +
       '<svg class="hme-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 7.7a5.4 5.4 0 0 1-8.1 4.6l-3.4 1.1 1.1-3.4A5.4 5.4 0 1 1 14 7.7z"/></svg>' +
     '</button>' +
     '<button class="hme-btn" data-action="undo" title="Undo last file change [Z]" disabled>\u21b6</button>' +
@@ -295,7 +295,7 @@ import { CSS } from "./styles.js";
     sendBtn.title = "Send";
     sendBtn.setAttribute("aria-label", "Send");
     textarea.value = "";
-    textarea.placeholder = "Comment on the whole document…";
+    textarea.placeholder = deckSlides.length ? "Comment on this slide…" : "Comment on the whole document…";
     popover.hidden = false;
     popover.style.left = "50%";
     popover.style.top = "50%";
@@ -651,8 +651,8 @@ import { CSS } from "./styles.js";
       anchorHtml: generalComment ? null : pending.anchorHtml,
       selector: generalComment ? null : pending.selector,
       primaryRect: generalComment ? null : pending.primaryRect,
-      slide: generalComment ? -1 : pendingCaptureEl ? slideOf(pendingCaptureEl) : -1,
-      slideTotal: generalComment ? 0 : deckSlides.length,
+      slide: generalComment ? (deckSlides.length ? deckIndex : -1) : pendingCaptureEl ? slideOf(pendingCaptureEl) : -1,
+      slideTotal: deckSlides.length,
       imageDataUrl: null,
     };
 

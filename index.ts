@@ -263,10 +263,12 @@ function buildPrompt(artifact: Artifact, body: SubmitBody): SendPart[] {
   );
 
   if (body.mode === "general") {
-    lines.push(
-      "",
-      "Mode: whole-document comment (no specific selection). Apply it to the document as a whole.",
-    );
+    lines.push("", "Mode: general comment (no specific text selection).");
+    if (typeof body.slide === "number" && body.slide >= 0) {
+      lines.push("Apply the comment to the slide indicated below.");
+    } else {
+      lines.push("Apply it to the document as a whole.");
+    }
   } else if (body.mode === "rect") {
     lines.push(
       "",
