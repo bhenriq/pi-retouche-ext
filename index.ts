@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep, extname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { isMarkdownPath, isMarpFrontmatter, findSourceSpan, locateSelection, slideSourceRegion } from "./lib/matching";
+import { isMarkdownPath, isMarpFrontmatter, marpTheme, findSourceSpan, locateSelection, slideSourceRegion } from "./lib/matching";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -335,13 +335,51 @@ ${slides}
 </html>`;
 }
 
+/**
+ * Find local CSS files that define the deck's frontmatter theme and return
+ * `--theme <file>` arguments so the Marp CLI renders with the same theme a
+ * user would get from `marp deck.md --theme theme.css`.
+ */
+async function marpThemeArgs(raw: string, filePath: string): Promise<string[]> {
+  const theme = marpTheme(raw);
+  if (!theme || ["default", "gaia", "uncover"].includes(theme)) return [];
+  const dir = dirname(filePath);
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch {
+    return [];
+  }
+  const themeRe = /@theme\s+("([^"]*)"|'([^']*)'|([^\s;]+))/i;
+  const out: string[] = [];
+  for (const name of entries) {
+    if (!/\.css$/i.test(name)) continue;
+    const p = join(dir, name);
+    const namedFile = name.toLowerCase() === `${theme.toLowerCase()}.css`;
+    let declaresTheme = false;
+    try {
+      const text = await readFile(p, "utf8");
+      const m = themeRe.exec(text);
+      if (m) {
+        const val = (m[2] || m[3] || m[4] || "").toLowerCase();
+        declaresTheme = val === theme.toLowerCase();
+      }
+    } catch {
+      /* skip unreadable files */
+    }
+    if (namedFile || declaresTheme) out.push("--theme", p);
+  }
+  return out;
+}
+
 async function renderMarpPage(raw: string, filePath: string): Promise<string> {
   const key = hash(raw);
   if (active?.marpCache && active.marpCache.hash === key) return active.marpCache.page;
   const tmp = await mkdtemp(join(tmpdir(), "hme-marp-"));
   const out = join(tmp, "out.html");
+  const themeArgs = await marpThemeArgs(raw, filePath);
   try {
-    await execFileAsync("marp", [filePath, "--template", "bare", "--allow-local-files", "--no-stdin", "--output", out], { timeout: 30000 });
+    await execFileAsync("marp", [filePath, ...themeArgs, "--template", "bare", "--allow-local-files", "--no-stdin", "--output", out], { timeout: 30000 });
     const cliHtml = await readFile(out, "utf8");
     const page = buildMarpDocument(cliHtml, basename(filePath));
     if (active) active.marpCache = { hash: key, page };

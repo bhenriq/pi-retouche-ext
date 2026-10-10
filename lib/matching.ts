@@ -10,6 +10,15 @@ export function isMarpFrontmatter(raw: string): boolean {
   return !!m && /^\s*marp\s*:\s*true\s*$/im.test(m[1]);
 }
 
+/** Return the `theme:` value from Marp frontmatter, or null. */
+export function marpTheme(raw: string): string | null {
+  const m = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---/.exec(raw);
+  if (!m) return null;
+  const tm = /^\s*theme\s*:\s*([^\s'"\n]+|'[^']*'|"[^"]*")\s*$/im.exec(m[1]);
+  if (!tm) return null;
+  return tm[1].replace(/^['"]|['"]$/g, "") || null;
+}
+
 /**
  * Find the selected (rendered) text in the raw source.
  *
