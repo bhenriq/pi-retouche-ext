@@ -13,7 +13,7 @@ Then loop:
 
 1. Call `next_request` with `timeout_seconds: 30`.
 2. If it returns `{"type":"none"}`, call it again.
-3. If `{"type":"text"}` or `{"type":"rect"}`: apply the requested change to the underlying source file with your normal editing tools. Use the `text`, `anchorHtml`, and `selector` context to locate the exact text.
+3. If `{"type":"text"}`, `{"type":"rect"}`, or `{"type":"node"}`: apply the requested change to the underlying source file with your normal editing tools. Use the `text`, `anchorHtml`, and `selector` context to locate the exact text. If `{"type":"general"}`, the comment applies to the whole document (no selection), so apply it directly.
 4. If `kind` is `"explain"`: do NOT edit the file — explain the selected content, then call `notify_browser` with a concise Markdown explanation.
 5. If `{"type":"notice"}`: acknowledge it and continue looping.
 6. Keep looping until the user tells you to stop.

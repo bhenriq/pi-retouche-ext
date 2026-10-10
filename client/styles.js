@@ -13,6 +13,7 @@ export const CSS = [
     ".hme-mode[data-mode='rect'] .hme-icon-rect{display:block}",
     ".hme-mode[data-mode='text'] .hme-icon-text{display:block}",
     ".hme-mode[data-mode='node'] .hme-icon-node{display:block}",
+    ".hme-comment .hme-icon{width:16px;height:16px;display:block}",
     ".hme-btn:disabled{opacity:.35;cursor:default}",
     ".hme-btn:disabled:hover{color:#d1d5db;background:transparent}",
     ".hme-box{position:fixed;border:2px solid #6366f1;background:rgba(99,102,241,.12);border-radius:3px}",

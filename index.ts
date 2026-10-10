@@ -83,7 +83,7 @@ function getMarked(): MarkedLib {
 type SendPart = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 
 interface SubmitBody {
-  mode: "rect" | "text" | "node";
+  mode: "rect" | "text" | "node" | "general";
   kind?: "edit" | "explain";
   slide?: number;
   slideTotal?: number;
@@ -262,7 +262,12 @@ function buildPrompt(artifact: Artifact, body: SubmitBody): SendPart[] {
     `Keep prose minimal: the edited document itself is the deliverable.`,
   );
 
-  if (body.mode === "rect") {
+  if (body.mode === "general") {
+    lines.push(
+      "",
+      "Mode: whole-document comment (no specific selection). Apply it to the document as a whole.",
+    );
+  } else if (body.mode === "rect") {
     lines.push(
       "",
       "Mode: region (rectangular area).",
@@ -698,7 +703,7 @@ async function handleRequest(
       sendJson(res, 400, { error: "instruction required" });
       return;
     }
-    if (body.mode !== "rect" && body.mode !== "text" && body.mode !== "node") {
+    if (body.mode !== "rect" && body.mode !== "text" && body.mode !== "node" && body.mode !== "general") {
       sendJson(res, 400, { error: "invalid mode" });
       return;
     }

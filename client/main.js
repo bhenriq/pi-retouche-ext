@@ -33,6 +33,7 @@ import { CSS } from "./styles.js";
   var startY = 0;
   var pending = null;
   var pendingCaptureEl = null;
+  var generalComment = false;
   var popoverLoc = { x: 0, y: 0 };
 
 
@@ -50,6 +51,9 @@ import { CSS } from "./styles.js";
     '<svg class="hme-icon hme-icon-rect" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke-dasharray="3 2"/></svg>' +
     '<svg class="hme-icon hme-icon-text" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h12v3.2h-1.2c-.3-1.3-.8-1.7-2.2-1.7H9.2v8.4c0 1.2.2 1.4 1.6 1.6V15H5.2v-1.5c1.4-.2 1.6-.4 1.6-1.6V3.5H5.4c-1.4 0-1.9.4-2.2 1.7H2V2z"/></svg>' +
     '<svg class="hme-icon hme-icon-node" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg>' +
+    '</button>' +
+    '<button class="hme-btn hme-comment" data-action="comment" title="Comment on the whole document [C]" aria-label="Comment on the whole document">' +
+      '<svg class="hme-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 7.7a5.4 5.4 0 0 1-8.1 4.6l-3.4 1.1 1.1-3.4A5.4 5.4 0 1 1 14 7.7z"/></svg>' +
     '</button>' +
     '<button class="hme-btn" data-action="undo" title="Undo last file change [Z]" disabled>\u21b6</button>' +
     '<button class="hme-btn" data-action="redo" title="Redo [Y]" disabled>\u21b7</button>' +
@@ -262,6 +266,7 @@ import { CSS } from "./styles.js";
     popover.hidden = false;
     popover.style.left = clampX(x) + "px";
     popover.style.top = clampY(y) + "px";
+    popover.style.transform = "none";
     autoGrow();
     textarea.focus();
   }
@@ -275,9 +280,29 @@ import { CSS } from "./styles.js";
   }
 
   function openQuick(x, y) {
+    generalComment = false;
     quick.hidden = false;
     quick.style.left = Math.max(8, Math.min(x, window.innerWidth - quick.offsetWidth - 8)) + "px";
     quick.style.top = Math.max(8, Math.min(y, window.innerHeight - quick.offsetHeight - 8)) + "px";
+  }
+
+  function openGeneralComment() {
+    generalComment = true;
+    pending = null;
+    pendingCaptureEl = null;
+    pendingEditOld = "";
+    popoverMode = "instruction";
+    sendBtn.title = "Send";
+    sendBtn.setAttribute("aria-label", "Send");
+    textarea.value = "";
+    textarea.placeholder = "Comment on the whole document…";
+    popover.hidden = false;
+    popover.style.left = "50%";
+    popover.style.top = "50%";
+    popover.style.transform = "translate(-50%, -50%)";
+    autoGrow();
+    textarea.focus();
+    popoverLoc = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
   }
 
   function openInstruction() {
@@ -406,6 +431,7 @@ import { CSS } from "./styles.js";
     busy = false;
     pending = null;
     pendingCaptureEl = null;
+    generalComment = false;
     pendingEditOld = "";
     popoverMode = "instruction";
     pin.hidden = true;
@@ -603,7 +629,7 @@ import { CSS } from "./styles.js";
 
   function submit(kind) {
     kind = kind || "edit";
-    if (!pending) return;
+    if (!pending && !generalComment) return;
     if (popoverMode === "edit") {
       doReplace();
       return;
@@ -617,16 +643,16 @@ import { CSS } from "./styles.js";
     explain.hidden = true;
 
     var payload = {
-      mode: pending.mode,
+      mode: generalComment ? "general" : pending.mode,
       kind: kind,
       instruction: instruction,
-      text: pending.text,
-      rect: pending.rect,
-      anchorHtml: pending.anchorHtml,
-      selector: pending.selector,
-      primaryRect: pending.primaryRect,
-      slide: pendingCaptureEl ? slideOf(pendingCaptureEl) : -1,
-      slideTotal: deckSlides.length,
+      text: generalComment ? null : pending.text,
+      rect: generalComment ? null : pending.rect,
+      anchorHtml: generalComment ? null : pending.anchorHtml,
+      selector: generalComment ? null : pending.selector,
+      primaryRect: generalComment ? null : pending.primaryRect,
+      slide: generalComment ? -1 : pendingCaptureEl ? slideOf(pendingCaptureEl) : -1,
+      slideTotal: generalComment ? 0 : deckSlides.length,
       imageDataUrl: null,
     };
 
@@ -828,6 +854,10 @@ import { CSS } from "./styles.js";
       toggleTheme();
       return;
     }
+    if (action === "comment") {
+      openGeneralComment();
+      return;
+    }
   });
 
   // Keyboard shortcuts: T selection mode, B background, Z undo, Y redo.
@@ -841,6 +871,9 @@ import { CSS } from "./styles.js";
       e.preventDefault();
     } else if (key === "b") {
       toggleTheme();
+      e.preventDefault();
+    } else if (key === "c") {
+      openGeneralComment();
       e.preventDefault();
     } else if (key === "z") {
       historyAction("undo");
@@ -873,6 +906,7 @@ import { CSS } from "./styles.js";
     hideQuick();
     pending = null;
     pendingCaptureEl = null;
+    generalComment = false;
     popoverMode = "instruction";
     setMode("text");
     e.preventDefault();
@@ -1026,6 +1060,7 @@ import { CSS } from "./styles.js";
     popoverMode = "instruction";
     pending = null;
     pendingCaptureEl = null;
+    generalComment = false;
   });
 
   sendBtn.addEventListener("click", function () {

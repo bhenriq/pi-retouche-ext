@@ -15,6 +15,7 @@
     ".hme-mode[data-mode='rect'] .hme-icon-rect{display:block}",
     ".hme-mode[data-mode='text'] .hme-icon-text{display:block}",
     ".hme-mode[data-mode='node'] .hme-icon-node{display:block}",
+    ".hme-comment .hme-icon{width:16px;height:16px;display:block}",
     ".hme-btn:disabled{opacity:.35;cursor:default}",
     ".hme-btn:disabled:hover{color:#d1d5db;background:transparent}",
     ".hme-box{position:fixed;border:2px solid #6366f1;background:rgba(99,102,241,.12);border-radius:3px}",
@@ -109,6 +110,7 @@
     var startY = 0;
     var pending = null;
     var pendingCaptureEl = null;
+    var generalComment = false;
     var popoverLoc = { x: 0, y: 0 };
     var styleEl = document.createElement("style");
     styleEl.setAttribute("data-hme-editor", "");
@@ -116,7 +118,7 @@
     document.head.appendChild(styleEl);
     var root = document.createElement("div");
     root.setAttribute("data-hme-overlay", "");
-    root.innerHTML = '<div class="hme-toolbar" data-hme-editor><button class="hme-btn hme-mode" data-action="mode" data-mode="text" title="Toggle selection mode (region / text / node) [T]" aria-label="Toggle selection mode"><svg class="hme-icon hme-icon-rect" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke-dasharray="3 2"/></svg><svg class="hme-icon hme-icon-text" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h12v3.2h-1.2c-.3-1.3-.8-1.7-2.2-1.7H9.2v8.4c0 1.2.2 1.4 1.6 1.6V15H5.2v-1.5c1.4-.2 1.6-.4 1.6-1.6V3.5H5.4c-1.4 0-1.9.4-2.2 1.7H2V2z"/></svg><svg class="hme-icon hme-icon-node" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg></button><button class="hme-btn" data-action="undo" title="Undo last file change [Z]" disabled>\u21B6</button><button class="hme-btn" data-action="redo" title="Redo [Y]" disabled>\u21B7</button><button class="hme-btn hme-theme" data-action="theme" title="Toggle dark / light [B]"><svg class="hme-icon hme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.8A5.8 5.8 0 0 1 6.2 2.5a6 6 0 1 0 7.3 7.3z"/></svg><svg class="hme-icon hme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M2.9 2.9l1.1 1.1M12 12l1.1 1.1M13.1 2.9L12 4M4 12l-1.1 1.1"/></svg></button></div><div class="hme-box" data-hme-editor hidden></div><div class="hme-popover" data-hme-editor hidden><textarea placeholder="What should I change here?"></textarea><div class="hme-actions"><span class="hme-hint">\u2318\u21B5 to send</span><button class="hme-send" title="Send" aria-label="Send"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 1.5 7.5 14.5 6 9 1.5 7.5z"/><path d="m14.5 1.5-7 7"/></svg></button></div></div><div class="hme-quick" data-hme-editor hidden><button class="hme-qbtn" data-quick="remove" title="Remove [R]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11M6.2 4.5v-.9a1.1 1.1 0 0 1 1.1-1.1h1.4a1.1 1.1 0 0 1 1.1 1.1v.9M3.9 4.5l.55 8a1.35 1.35 0 0 0 1.34 1.25h4.42a1.35 1.35 0 0 0 1.34-1.25l.55-8"/></svg><span class="hme-qlabel">Remove</span><kbd class="hme-qkbd">R</kbd></button><button class="hme-qbtn" data-quick="less" title="Less [L]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.8 8H5.2M8.4 5.6 11 8l-2.6 2.4M7.6 5.6 5 8l2.6 2.4"/></svg><span class="hme-qlabel">Less</span><kbd class="hme-qkbd">L</kbd></button><button class="hme-qbtn" data-quick="more" title="More [M]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.2 8h5.6M7.6 5.6 5 8l2.6 2.4M8.4 5.6 11 8l-2.6 2.4"/></svg><span class="hme-qlabel">More</span><kbd class="hme-qkbd">M</kbd></button><button class="hme-qbtn" data-quick="edit" title="Edit [E]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.7 3.4 12.6 6.3 6.6 12.3a.6.6 0 0 1-.25.15l-2.95.77.77-2.95a.6.6 0 0 1 .15-.25z"/></svg><span class="hme-qlabel">Edit</span><kbd class="hme-qkbd">E</kbd></button><button class="hme-qbtn" data-quick="other" title="Other [O]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg><span class="hme-qlabel">Other</span><kbd class="hme-qkbd">O</kbd></button><button class="hme-qbtn" data-quick="explain" title="Explain [X]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2a3.8 3.8 0 0 0-1.5 7.3c.35.15.5.45.5.8v.9a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-.9c0-.35.15-.65.5-.8A3.8 3.8 0 0 0 8 2z"/><path d="M6.8 13h2.4"/></svg><span class="hme-qlabel">Explain</span><kbd class="hme-qkbd">X</kbd></button></div><div class="hme-explain" data-hme-editor hidden><div class="hme-explain-head"><span>Explanation</span><button class="hme-explain-x" aria-label="Close">\xD7</button></div><div class="hme-explain-body"></div></div><div class="hme-deck" data-hme-editor hidden><button class="hme-deck-prev" aria-label="Previous slide">\u2039</button><span class="hme-deck-pos"></span><button class="hme-deck-next" aria-label="Next slide">\u203A</button></div><div class="hme-pin" data-hme-editor hidden><span class="hme-spin"></span></div><div class="hme-toast" data-hme-editor hidden></div>';
+    root.innerHTML = '<div class="hme-toolbar" data-hme-editor><button class="hme-btn hme-mode" data-action="mode" data-mode="text" title="Toggle selection mode (region / text / node) [T]" aria-label="Toggle selection mode"><svg class="hme-icon hme-icon-rect" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke-dasharray="3 2"/></svg><svg class="hme-icon hme-icon-text" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h12v3.2h-1.2c-.3-1.3-.8-1.7-2.2-1.7H9.2v8.4c0 1.2.2 1.4 1.6 1.6V15H5.2v-1.5c1.4-.2 1.6-.4 1.6-1.6V3.5H5.4c-1.4 0-1.9.4-2.2 1.7H2V2z"/></svg><svg class="hme-icon hme-icon-node" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg></button><button class="hme-btn hme-comment" data-action="comment" title="Comment on the whole document [C]" aria-label="Comment on the whole document"><svg class="hme-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 7.7a5.4 5.4 0 0 1-8.1 4.6l-3.4 1.1 1.1-3.4A5.4 5.4 0 1 1 14 7.7z"/></svg></button><button class="hme-btn" data-action="undo" title="Undo last file change [Z]" disabled>\u21B6</button><button class="hme-btn" data-action="redo" title="Redo [Y]" disabled>\u21B7</button><button class="hme-btn hme-theme" data-action="theme" title="Toggle dark / light [B]"><svg class="hme-icon hme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.8A5.8 5.8 0 0 1 6.2 2.5a6 6 0 1 0 7.3 7.3z"/></svg><svg class="hme-icon hme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M2.9 2.9l1.1 1.1M12 12l1.1 1.1M13.1 2.9L12 4M4 12l-1.1 1.1"/></svg></button></div><div class="hme-box" data-hme-editor hidden></div><div class="hme-popover" data-hme-editor hidden><textarea placeholder="What should I change here?"></textarea><div class="hme-actions"><span class="hme-hint">\u2318\u21B5 to send</span><button class="hme-send" title="Send" aria-label="Send"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 1.5 7.5 14.5 6 9 1.5 7.5z"/><path d="m14.5 1.5-7 7"/></svg></button></div></div><div class="hme-quick" data-hme-editor hidden><button class="hme-qbtn" data-quick="remove" title="Remove [R]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11M6.2 4.5v-.9a1.1 1.1 0 0 1 1.1-1.1h1.4a1.1 1.1 0 0 1 1.1 1.1v.9M3.9 4.5l.55 8a1.35 1.35 0 0 0 1.34 1.25h4.42a1.35 1.35 0 0 0 1.34-1.25l.55-8"/></svg><span class="hme-qlabel">Remove</span><kbd class="hme-qkbd">R</kbd></button><button class="hme-qbtn" data-quick="less" title="Less [L]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.8 8H5.2M8.4 5.6 11 8l-2.6 2.4M7.6 5.6 5 8l2.6 2.4"/></svg><span class="hme-qlabel">Less</span><kbd class="hme-qkbd">L</kbd></button><button class="hme-qbtn" data-quick="more" title="More [M]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.2 8h5.6M7.6 5.6 5 8l2.6 2.4M8.4 5.6 11 8l-2.6 2.4"/></svg><span class="hme-qlabel">More</span><kbd class="hme-qkbd">M</kbd></button><button class="hme-qbtn" data-quick="edit" title="Edit [E]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.7 3.4 12.6 6.3 6.6 12.3a.6.6 0 0 1-.25.15l-2.95.77.77-2.95a.6.6 0 0 1 .15-.25z"/></svg><span class="hme-qlabel">Edit</span><kbd class="hme-qkbd">E</kbd></button><button class="hme-qbtn" data-quick="other" title="Other [O]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg><span class="hme-qlabel">Other</span><kbd class="hme-qkbd">O</kbd></button><button class="hme-qbtn" data-quick="explain" title="Explain [X]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2a3.8 3.8 0 0 0-1.5 7.3c.35.15.5.45.5.8v.9a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-.9c0-.35.15-.65.5-.8A3.8 3.8 0 0 0 8 2z"/><path d="M6.8 13h2.4"/></svg><span class="hme-qlabel">Explain</span><kbd class="hme-qkbd">X</kbd></button></div><div class="hme-explain" data-hme-editor hidden><div class="hme-explain-head"><span>Explanation</span><button class="hme-explain-x" aria-label="Close">\xD7</button></div><div class="hme-explain-body"></div></div><div class="hme-deck" data-hme-editor hidden><button class="hme-deck-prev" aria-label="Previous slide">\u2039</button><span class="hme-deck-pos"></span><button class="hme-deck-next" aria-label="Next slide">\u203A</button></div><div class="hme-pin" data-hme-editor hidden><span class="hme-spin"></span></div><div class="hme-toast" data-hme-editor hidden></div>';
     document.body.appendChild(root);
     var toolbar = root.querySelector(".hme-toolbar");
     var undoBtn = toolbar.querySelector('[data-action="undo"]');
@@ -252,6 +254,7 @@
       popover.hidden = false;
       popover.style.left = clampX(x) + "px";
       popover.style.top = clampY(y) + "px";
+      popover.style.transform = "none";
       autoGrow();
       textarea.focus();
     }
@@ -262,9 +265,28 @@
       quick.hidden = true;
     }
     function openQuick(x, y) {
+      generalComment = false;
       quick.hidden = false;
       quick.style.left = Math.max(8, Math.min(x, window.innerWidth - quick.offsetWidth - 8)) + "px";
       quick.style.top = Math.max(8, Math.min(y, window.innerHeight - quick.offsetHeight - 8)) + "px";
+    }
+    function openGeneralComment() {
+      generalComment = true;
+      pending = null;
+      pendingCaptureEl = null;
+      pendingEditOld = "";
+      popoverMode = "instruction";
+      sendBtn.title = "Send";
+      sendBtn.setAttribute("aria-label", "Send");
+      textarea.value = "";
+      textarea.placeholder = "Comment on the whole document\u2026";
+      popover.hidden = false;
+      popover.style.left = "50%";
+      popover.style.top = "50%";
+      popover.style.transform = "translate(-50%, -50%)";
+      autoGrow();
+      textarea.focus();
+      popoverLoc = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     }
     function openInstruction() {
       popoverMode = "instruction";
@@ -368,6 +390,7 @@
       busy = false;
       pending = null;
       pendingCaptureEl = null;
+      generalComment = false;
       pendingEditOld = "";
       popoverMode = "instruction";
       pin.hidden = true;
@@ -538,7 +561,7 @@
     }
     function submit(kind) {
       kind = kind || "edit";
-      if (!pending) return;
+      if (!pending && !generalComment) return;
       if (popoverMode === "edit") {
         doReplace();
         return;
@@ -551,16 +574,16 @@
       if (!instruction) instruction = "Explain the selected content.";
       explain.hidden = true;
       var payload = {
-        mode: pending.mode,
+        mode: generalComment ? "general" : pending.mode,
         kind,
         instruction,
-        text: pending.text,
-        rect: pending.rect,
-        anchorHtml: pending.anchorHtml,
-        selector: pending.selector,
-        primaryRect: pending.primaryRect,
-        slide: pendingCaptureEl ? slideOf(pendingCaptureEl) : -1,
-        slideTotal: deckSlides.length,
+        text: generalComment ? null : pending.text,
+        rect: generalComment ? null : pending.rect,
+        anchorHtml: generalComment ? null : pending.anchorHtml,
+        selector: generalComment ? null : pending.selector,
+        primaryRect: generalComment ? null : pending.primaryRect,
+        slide: generalComment ? -1 : pendingCaptureEl ? slideOf(pendingCaptureEl) : -1,
+        slideTotal: generalComment ? 0 : deckSlides.length,
         imageDataUrl: null
       };
       busy = true;
@@ -721,6 +744,10 @@
         toggleTheme();
         return;
       }
+      if (action === "comment") {
+        openGeneralComment();
+        return;
+      }
     });
     document.addEventListener("keydown", function(e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -732,6 +759,9 @@
         e.preventDefault();
       } else if (key === "b") {
         toggleTheme();
+        e.preventDefault();
+      } else if (key === "c") {
+        openGeneralComment();
         e.preventDefault();
       } else if (key === "z") {
         historyAction("undo");
@@ -761,6 +791,7 @@
       hideQuick();
       pending = null;
       pendingCaptureEl = null;
+      generalComment = false;
       popoverMode = "instruction";
       setMode("text");
       e.preventDefault();
@@ -887,6 +918,7 @@
       popoverMode = "instruction";
       pending = null;
       pendingCaptureEl = null;
+      generalComment = false;
     });
     sendBtn.addEventListener("click", function() {
       submit("edit");

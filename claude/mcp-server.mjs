@@ -287,16 +287,17 @@ async function handleHttp(req, res) {
     let body;
     try { body = JSON.parse(raw); } catch { return sendJson(res, 400, { error: "invalid json" }); }
     if (typeof body.instruction !== "string" || !body.instruction.trim()) return sendJson(res, 400, { error: "instruction required" });
+    const isGeneral = body.mode === "general";
     const item = {
-      type: body.mode === "rect" ? "rect" : "text",
+      type: body.mode === "rect" ? "rect" : body.mode === "node" ? "node" : isGeneral ? "general" : "text",
       kind: body.kind === "explain" ? "explain" : "edit",
       instruction: body.instruction,
-      text: body.text,
-      selector: body.selector,
-      anchorHtml: body.anchorHtml,
-      rect: body.rect,
-      slide: typeof body.slide === "number" ? body.slide : -1,
-      slideTotal: typeof body.slideTotal === "number" ? body.slideTotal : 0,
+      text: isGeneral ? null : body.text,
+      selector: isGeneral ? null : body.selector,
+      anchorHtml: isGeneral ? null : body.anchorHtml,
+      rect: isGeneral ? null : body.rect,
+      slide: isGeneral ? -1 : typeof body.slide === "number" ? body.slide : -1,
+      slideTotal: isGeneral ? 0 : typeof body.slideTotal === "number" ? body.slideTotal : 0,
     };
     enqueueSubmit(item);
     return sendJson(res, 200, { ok: true });
