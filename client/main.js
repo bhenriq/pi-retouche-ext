@@ -839,11 +839,18 @@ import { CSS } from "./styles.js";
     }
   });
 
+  // Escape: close any open popup (explain, instruction/edit popover, quick
+  // actions) and return to text selection mode.
   document.addEventListener("keydown", function (e) {
-    if (e.key !== "Escape" || quick.hidden) return;
+    if (e.key !== "Escape") return;
+    explain.hidden = true;
+    closePopover();
     hideQuick();
     pending = null;
     pendingCaptureEl = null;
+    popoverMode = "instruction";
+    setMode("text");
+    e.preventDefault();
   });
 
   // Clicking anywhere outside the quick-action bar dismisses the selection.
@@ -963,12 +970,7 @@ import { CSS } from "./styles.js";
   textarea.addEventListener("input", autoGrow);
 
   textarea.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") {
-      closePopover();
-      hideQuick();
-      pending = null;
-      pendingCaptureEl = null;
-    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       submit("edit");
     }
   });

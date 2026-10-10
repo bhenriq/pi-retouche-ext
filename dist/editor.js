@@ -744,10 +744,15 @@
       }
     });
     document.addEventListener("keydown", function(e) {
-      if (e.key !== "Escape" || quick.hidden) return;
+      if (e.key !== "Escape") return;
+      explain.hidden = true;
+      closePopover();
       hideQuick();
       pending = null;
       pendingCaptureEl = null;
+      popoverMode = "instruction";
+      setMode("text");
+      e.preventDefault();
     });
     document.addEventListener("pointerdown", function(e) {
       if (quick.hidden) return;
@@ -845,12 +850,7 @@
     );
     textarea.addEventListener("input", autoGrow);
     textarea.addEventListener("keydown", function(e) {
-      if (e.key === "Escape") {
-        closePopover();
-        hideQuick();
-        pending = null;
-        pendingCaptureEl = null;
-      } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         submit("edit");
       }
     });
