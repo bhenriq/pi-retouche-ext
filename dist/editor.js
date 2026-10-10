@@ -35,7 +35,7 @@
     ".hme-quick{position:fixed;display:flex;flex-direction:column;gap:2px;background:#111827;padding:4px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.4)}",
     ".hme-qbtn{display:flex;align-items:center;gap:8px;min-width:140px;color:#e5e7eb;background:transparent;border:0;padding:6px 9px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600;text-align:left}",
     ".hme-qbtn:hover{background:#374151;color:#fff}",
-    ".hme-qicon{width:15px;height:15px;flex:0 0 15px;display:block}",
+    ".hme-qicon{width:18px;height:18px;flex:0 0 18px;display:block}",
     ".hme-qlabel{flex:1 1 auto;margin-right:12px}",
     ".hme-qkbd{font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:#9ca3af;background:#1f2937;border:1px solid #374151;border-radius:4px;padding:1px 5px}",
     ".hme-qbtn:hover .hme-qkbd{color:#e5e7eb;background:#111827}",
