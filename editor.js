@@ -25,6 +25,7 @@
   }
 
   var mode = "text";
+  document.documentElement.setAttribute("data-hme-mode", mode);
   var busy = false;
   var dragging = false;
   var startX = 0;
@@ -34,6 +35,7 @@
   var popoverLoc = { x: 0, y: 0 };
 
   var CSS = [
+    "[data-hme-overlay],[data-hme-overlay] *{box-sizing:border-box}",
     "[data-hme-overlay]{position:fixed;inset:0;pointer-events:none;z-index:2147483000;font:13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif}",
     "[data-hme-overlay] [hidden]{display:none!important}",
     "[data-hme-editor]{box-sizing:border-box;pointer-events:auto}",
@@ -46,24 +48,29 @@
     ".hme-mode .hme-icon{width:16px;height:16px;display:none}",
     ".hme-mode[data-mode='rect'] .hme-icon-rect{display:block}",
     ".hme-mode[data-mode='text'] .hme-icon-text{display:block}",
+    ".hme-mode[data-mode='node'] .hme-icon-node{display:block}",
     ".hme-btn:disabled{opacity:.35;cursor:default}",
     ".hme-btn:disabled:hover{color:#d1d5db;background:transparent}",
     ".hme-box{position:fixed;border:2px solid #6366f1;background:rgba(99,102,241,.12);border-radius:3px}",
-    ".hme-popover{position:fixed;width:320px;max-width:calc(100vw - 16px);background:#fff;color:#111827;border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,.35);padding:10px}",
-    ".hme-popover textarea{width:100%;height:72px;resize:vertical;border:1px solid #d1d5db;border-radius:6px;padding:8px;font:inherit;color:#111827}",
+    ".hme-popover{position:fixed;width:320px;max-width:calc(100vw - 16px);background:#fff;color:#111827;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,.35);padding:10px}",
+    ".hme-popover textarea{width:100%;height:auto;min-height:44px;max-height:220px;resize:none;overflow:auto;border:1px solid #d1d5db;border-radius:6px;padding:8px;font:inherit;color:#111827}",
     ".hme-popover textarea:focus{outline:2px solid #6366f1;outline-offset:-1px}",
-    ".hme-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:8px}",
-    ".hme-cancel{color:#374151;background:#f3f4f6;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600}",
-    ":root[data-hme-theme='dark'] .hme-popover{background:#111111;color:#e5e7eb;box-shadow:0 10px 30px rgba(0,0,0,.6)}",
+    ".hme-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:8px}",
+    ".hme-hint{margin-right:auto;padding-left:4px;font-size:11px;color:#9ca3af}",
+    ".hme-deck{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:4px;background:#111827;color:#e5e7eb;padding:5px 10px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.45);z-index:1}",
+    ".hme-deck button{background:transparent;border:0;color:#e5e7eb;font-size:18px;line-height:1;padding:0 8px;border-radius:6px;cursor:pointer}",
+    ".hme-deck button:hover{background:#374151}",
+    ".hme-deck-pos{font:600 12px/1 -apple-system,Segoe UI,Roboto,sans-serif;min-width:54px;text-align:center}",
+    ":root[data-hme-theme='dark'] .hme-popover{background:#111111;color:#e5e7eb;border-color:#333333;box-shadow:0 10px 30px rgba(0,0,0,.6)}",
     ":root[data-hme-theme='dark'] .hme-popover textarea{background:#0b0b0b;color:#e5e7eb;border-color:#333333}",
-    ":root[data-hme-theme='dark'] .hme-cancel{color:#e5e7eb;background:#262626}",
-    ".hme-send{color:#fff;background:#4f46e5;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600}",
+    ".hme-send{display:flex;align-items:center;justify-content:center;color:#fff;background:#4f46e5;border:0;padding:6px 9px;border-radius:6px;cursor:pointer;font:inherit}",
+    ".hme-send svg{width:16px;height:16px;display:block}",
     ".hme-send:disabled{opacity:.5;cursor:default}",
-    ".hme-quick{position:fixed;display:flex;gap:4px;background:#111827;padding:4px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.4)}",
-    ".hme-qbtn{color:#e5e7eb;background:transparent;border:0;padding:6px 9px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600}",
+    ".hme-quick{position:fixed;display:flex;flex-direction:column;gap:2px;background:#111827;padding:4px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.4)}",
+    ".hme-qbtn{color:#e5e7eb;background:transparent;border:0;padding:6px 14px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600;text-align:left}",
     ".hme-qbtn:hover{background:#374151;color:#fff}",
-    ".hme-qcancel{color:#9ca3af}",
-    ".hme-explain{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 32px));max-height:75vh;display:flex;flex-direction:column;overflow:hidden;background:#fff;color:#111827;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.45)}",
+
+    ".hme-explain{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 32px));max-height:75vh;display:flex;flex-direction:column;overflow:hidden;background:#fff;color:#111827;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.45)}",
     ".hme-explain-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 10px 10px 18px;border-bottom:1px solid #e5e7eb;font:600 14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif}",
     ".hme-explain-x{background:transparent;border:0;color:#6b7280;font-size:22px;line-height:1;padding:0 8px;border-radius:6px;cursor:pointer}",
     ".hme-explain-x:hover{background:#f3f4f6;color:#111827}",
@@ -82,14 +89,10 @@
     ".hme-explain-body pre code{background:none;padding:0}",
     ".hme-explain-body a{color:#818cf8}",
     ".hme-explain-body blockquote{margin-left:0;padding:.2em .8em;border-left:3px solid rgba(127,127,127,.5);opacity:.9}",
-    ".hme-explain-foot{display:flex;justify-content:flex-end;padding:10px 16px;border-top:1px solid #e5e7eb;flex:0 0 auto}",
-    ".hme-explain-close{color:#374151;background:#f3f4f6;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600}",
-    ":root[data-hme-theme='dark'] .hme-explain{background:#111111;color:#e5e7eb;box-shadow:0 20px 60px rgba(0,0,0,.7)}",
+    ":root[data-hme-theme='dark'] .hme-explain{background:#111111;color:#e5e7eb;border-color:#333333;box-shadow:0 20px 60px rgba(0,0,0,.7)}",
     ":root[data-hme-theme='dark'] .hme-explain-head{border-bottom-color:#262626}",
-    ":root[data-hme-theme='dark'] .hme-explain-foot{border-top-color:#262626}",
     ":root[data-hme-theme='dark'] .hme-explain-x{color:#9ca3af}",
     ":root[data-hme-theme='dark'] .hme-explain-x:hover{background:#262626;color:#e5e7eb}",
-    ":root[data-hme-theme='dark'] .hme-explain-close{color:#e5e7eb;background:#262626}",
     ".hme-theme{display:flex;align-items:center;justify-content:center;padding:6px 9px}",
     ".hme-theme .hme-icon{width:16px;height:16px;display:none}",
     ":root[data-hme-theme='dark'] .hme-theme .hme-icon-sun{display:block}",
@@ -105,6 +108,10 @@
     ".hme-toast.show{opacity:1}",
     ".hme-toast.error{background:#b91c1c}",
     "body.hme-dragging,body.hme-dragging *{user-select:none!important;-webkit-user-select:none!important}",
+    "body.hme-dragging img,body.hme-dragging a,body.hme-dragging [draggable='true']{-webkit-user-drag:none!important;user-drag:none}",
+    ":root[data-hme-mode='rect'] body > *:not([data-hme-overlay]){cursor:crosshair}",
+    ":root[data-hme-mode='text'] body > *:not([data-hme-overlay]){cursor:text}",
+    ":root[data-hme-mode='node'] body > *:not([data-hme-overlay]){cursor:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxOCcgaGVpZ2h0PScxOCcgdmlld0JveD0nMCAwIDI2IDI2Jz48Y2lyY2xlIGN4PScxMycgY3k9JzEzJyByPSc3LjUnIGZpbGw9J25vbmUnIHN0cm9rZT0nIzAwMCcgc3Ryb2tlLXdpZHRoPSc0Jy8+PGNpcmNsZSBjeD0nMTMnIGN5PScxMycgcj0nNy41JyBmaWxsPSdub25lJyBzdHJva2U9JyNmZmYnIHN0cm9rZS13aWR0aD0nMS44Jy8+PHBhdGggZD0nTTEzIDF2NC41TTEzIDIwLjVWMjVNMSAxM2g0LjVNMjAuNSAxM0gyNScgc3Ryb2tlPScjMDAwJyBzdHJva2Utd2lkdGg9JzQnIHN0cm9rZS1saW5lY2FwPSdyb3VuZCcvPjxwYXRoIGQ9J00xMyAxdjQuNU0xMyAyMC41VjI1TTEgMTNoNC41TTIwLjUgMTNIMjUnIHN0cm9rZT0nI2ZmZicgc3Ryb2tlLXdpZHRoPScxLjgnIHN0cm9rZS1saW5lY2FwPSdyb3VuZCcvPjxjaXJjbGUgY3g9JzEzJyBjeT0nMTMnIHI9JzEuNicgZmlsbD0nI2ZmZicgc3Ryb2tlPScjMDAwJyBzdHJva2Utd2lkdGg9JzEuMicvPjwvc3ZnPg==) 9 9, pointer}",
   ].join("\n");
 
   var styleEl = document.createElement("style");
@@ -116,13 +123,14 @@
   root.setAttribute("data-hme-overlay", "");
   root.innerHTML =
     '<div class="hme-toolbar" data-hme-editor>' +
-    '<button class="hme-btn hme-mode" data-action="mode" data-mode="text" title="Toggle selection mode (region / text)" aria-label="Toggle selection mode">' +
+    '<button class="hme-btn hme-mode" data-action="mode" data-mode="text" title="Toggle selection mode (region / text / node) [T]" aria-label="Toggle selection mode">' +
     '<svg class="hme-icon hme-icon-rect" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke-dasharray="3 2"/></svg>' +
     '<svg class="hme-icon hme-icon-text" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h12v3.2h-1.2c-.3-1.3-.8-1.7-2.2-1.7H9.2v8.4c0 1.2.2 1.4 1.6 1.6V15H5.2v-1.5c1.4-.2 1.6-.4 1.6-1.6V3.5H5.4c-1.4 0-1.9.4-2.2 1.7H2V2z"/></svg>' +
+    '<svg class="hme-icon hme-icon-node" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg>' +
     '</button>' +
-    '<button class="hme-btn" data-action="undo" title="Undo last file change" disabled>\u21b6</button>' +
-    '<button class="hme-btn" data-action="redo" title="Redo" disabled>\u21b7</button>' +
-    '<button class="hme-btn hme-theme" data-action="theme" title="Toggle dark / light">' +
+    '<button class="hme-btn" data-action="undo" title="Undo last file change [Z]" disabled>\u21b6</button>' +
+    '<button class="hme-btn" data-action="redo" title="Redo [Y]" disabled>\u21b7</button>' +
+    '<button class="hme-btn hme-theme" data-action="theme" title="Toggle dark / light [B]">' +
     '<svg class="hme-icon hme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.8A5.8 5.8 0 0 1 6.2 2.5a6 6 0 1 0 7.3 7.3z"/></svg>' +
     '<svg class="hme-icon hme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M2.9 2.9l1.1 1.1M12 12l1.1 1.1M13.1 2.9L12 4M4 12l-1.1 1.1"/></svg>' +
     "</button>" +
@@ -130,7 +138,7 @@
     '<div class="hme-box" data-hme-editor hidden></div>' +
     '<div class="hme-popover" data-hme-editor hidden>' +
     '<textarea placeholder="What should I change here?"></textarea>' +
-    '<div class="hme-actions"><button class="hme-cancel">Cancel</button><button class="hme-explain-btn" hidden>Explain</button><button class="hme-send">Send</button></div>' +
+    '<div class="hme-actions"><span class="hme-hint">\u2318\u21b5 to send</span><button class="hme-send" title="Send" aria-label="Send"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 1.5 7.5 14.5 6 9 1.5 7.5z"/><path d="m14.5 1.5-7 7"/></svg></button></div>' +
     "</div>" +
     '<div class="hme-quick" data-hme-editor hidden>' +
     '<button class="hme-qbtn" data-quick="remove">Remove</button>' +
@@ -139,12 +147,15 @@
     '<button class="hme-qbtn" data-quick="edit">Edit</button>' +
     '<button class="hme-qbtn" data-quick="other">Other</button>' +
     '<button class="hme-qbtn" data-quick="explain">Explain</button>' +
-    '<button class="hme-qbtn hme-qcancel" data-quick="cancel">Cancel</button>' +
     "</div>" +
     '<div class="hme-explain" data-hme-editor hidden>' +
     '<div class="hme-explain-head"><span>Explanation</span><button class="hme-explain-x" aria-label="Close">\u00d7</button></div>' +
     '<div class="hme-explain-body"></div>' +
-    '<div class="hme-explain-foot"><button class="hme-explain-close">Close</button></div>' +
+    "</div>" +
+    '<div class="hme-deck" data-hme-editor hidden>' +
+    '<button class="hme-deck-prev" aria-label="Previous slide">\u2039</button>' +
+    '<span class="hme-deck-pos"></span>' +
+    '<button class="hme-deck-next" aria-label="Next slide">\u203a</button>' +
     "</div>" +
     '<div class="hme-pin" data-hme-editor hidden><span class="hme-spin"></span></div>' +
     '<div class="hme-toast" data-hme-editor hidden></div>';
@@ -157,21 +168,25 @@
   var popover = root.querySelector(".hme-popover");
   var quick = root.querySelector(".hme-quick");
   var textarea = root.querySelector("textarea");
-  var cancelBtn = root.querySelector(".hme-cancel");
   var sendBtn = root.querySelector(".hme-send");
-  var explainBtn = root.querySelector(".hme-explain-btn");
   var explain = root.querySelector(".hme-explain");
   var explainBody = root.querySelector(".hme-explain-body");
-  var explainClose = root.querySelector(".hme-explain-close");
   var explainX = root.querySelector(".hme-explain-x");
   var pin = root.querySelector(".hme-pin");
   var toast = root.querySelector(".hme-toast");
+  var deck = root.querySelector(".hme-deck");
+  var deckPos = root.querySelector(".hme-deck-pos");
+  var deckPrev = root.querySelector(".hme-deck-prev");
+  var deckNext = root.querySelector(".hme-deck-next");
 
   var toastTimer = null;
   var settleGraceTimer = null;
   var watchdogTimer = null;
   var popoverMode = "instruction";
   var pendingEditOld = "";
+  var nodePaused = false;
+  var deckSlides = [];
+  var deckIndex = 0;
 
   // -------------------------------------------------------------------------
   // DOM helpers (all editor-owned nodes are stripped from any capture)
@@ -295,10 +310,16 @@
     return Math.max(8, Math.min(y, window.innerHeight - 120));
   }
 
+  function autoGrow() {
+    textarea.style.height = "auto";
+    textarea.style.height = Math.min(textarea.scrollHeight || 44, 220) + "px";
+  }
+
   function openPopover(x, y) {
     popover.hidden = false;
     popover.style.left = clampX(x) + "px";
     popover.style.top = clampY(y) + "px";
+    autoGrow();
     textarea.focus();
   }
 
@@ -318,8 +339,9 @@
 
   function openInstruction() {
     popoverMode = "instruction";
-    sendBtn.textContent = "Send";
-    if (explainBtn) explainBtn.hidden = false;
+    sendBtn.title = "Send";
+    sendBtn.setAttribute("aria-label", "Send");
+    textarea.value = "";
     textarea.placeholder = "What should I change here?";
     openPopover(popoverLoc.x, popoverLoc.y);
   }
@@ -327,8 +349,8 @@
   function openEdit() {
     popoverMode = "edit";
     pendingEditOld = pending && pending.text ? pending.text : "";
-    sendBtn.textContent = "Replace";
-    if (explainBtn) explainBtn.hidden = true;
+    sendBtn.title = "Replace";
+    sendBtn.setAttribute("aria-label", "Replace");
     textarea.placeholder = "New text";
     textarea.value = pendingEditOld;
     openPopover(popoverLoc.x, popoverLoc.y);
@@ -396,6 +418,42 @@
     pin.hidden = false;
   }
 
+  function slideOf(el) {
+    if (!deckSlides.length || !el) return -1;
+    for (var k = 0; k < deckSlides.length; k++) {
+      if (deckSlides[k].contains(el)) return k;
+    }
+    return -1;
+  }
+
+  function showSlide(i) {
+    if (!deckSlides.length) return;
+    deckIndex = Math.max(0, Math.min(i, deckSlides.length - 1));
+    for (var k = 0; k < deckSlides.length; k++) {
+      deckSlides[k].classList.toggle("hme-slide-active", k === deckIndex);
+    }
+    deckPos.textContent = deckIndex + 1 + " / " + deckSlides.length;
+  }
+
+  function changeSlide(delta) {
+    showSlide(deckIndex + delta);
+    hideQuick();
+    closePopover();
+    pending = null;
+    pendingCaptureEl = null;
+  }
+
+  function initDeck() {
+    deckSlides = Array.prototype.slice.call(document.querySelectorAll("svg[data-marpit-svg]"));
+    if (!deckSlides.length) {
+      deck.hidden = true;
+      return;
+    }
+    if (deckIndex >= deckSlides.length) deckIndex = 0;
+    deck.hidden = false;
+    showSlide(deckIndex);
+  }
+
   function settle() {
     busy = false;
     pending = null;
@@ -404,7 +462,8 @@
     popoverMode = "instruction";
     pin.hidden = true;
     sendBtn.disabled = false;
-    sendBtn.textContent = "Send";
+    sendBtn.title = "Send";
+    sendBtn.setAttribute("aria-label", "Send");
     textarea.placeholder = "What should I change here?";
     clearTimeout(settleGraceTimer);
     clearTimeout(watchdogTimer);
@@ -535,6 +594,26 @@
     openQuick(popoverLoc.x, popoverLoc.y);
   }
 
+  function finishNode(el) {
+    nodePaused = true;
+    var r = el.getBoundingClientRect();
+    var tc = el.textContent || "";
+    var trimmed = tc.trim();
+    var lead = tc.length - tc.replace(/^\s+/, "").length;
+    pending = {
+      mode: "node",
+      text: trimmed || undefined,
+      anchorText: tc,
+      startOffset: trimmed ? lead : -1,
+      anchorHtml: captureHtml(el),
+      selector: cssPath(el) || undefined,
+      primaryRect: rectOf(r),
+    };
+    pendingCaptureEl = el;
+    popoverLoc = { x: r.left, y: r.bottom + 8 };
+    openQuick(popoverLoc.x, popoverLoc.y);
+  }
+
   // -------------------------------------------------------------------------
   // Capture + submit
   // -------------------------------------------------------------------------
@@ -598,6 +677,8 @@
       anchorHtml: pending.anchorHtml,
       selector: pending.selector,
       primaryRect: pending.primaryRect,
+      slide: pendingCaptureEl ? slideOf(pendingCaptureEl) : -1,
+      slideTotal: deckSlides.length,
       imageDataUrl: null,
     };
 
@@ -613,7 +694,7 @@
     }, 180000);
 
     var work = Promise.resolve();
-    if (payload.mode === "rect") {
+    if (payload.mode === "rect" || payload.mode === "node") {
       work = captureRegion().then(function (dataUrl) {
         payload.imageDataUrl = dataUrl;
       });
@@ -721,6 +802,7 @@
         document.body.appendChild(overlay);
 
         settle();
+        initDeck();
       })
       .catch(function () {
         /* transient failure; the SSE retry will re-trigger */
@@ -751,6 +833,26 @@
   // Event wiring
   // -------------------------------------------------------------------------
 
+  function cycleMode() {
+    mode = mode === "rect" ? "text" : mode === "text" ? "node" : "rect";
+    document.documentElement.setAttribute("data-hme-mode", mode);
+    var mb = toolbar.querySelector(".hme-mode");
+    if (mb) mb.setAttribute("data-mode", mode);
+    box.hidden = true;
+    nodePaused = false;
+  }
+
+  function toggleTheme() {
+    var isDark = document.documentElement.getAttribute("data-hme-theme") === "dark";
+    var next = isDark ? "light" : "dark";
+    document.documentElement.setAttribute("data-hme-theme", next);
+    try {
+      localStorage.setItem("hme-theme", next);
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   toolbar.addEventListener("click", function (e) {
     var btn = e.target.closest(".hme-btn");
     if (!btn || btn.disabled) return;
@@ -760,19 +862,39 @@
       return;
     }
     if (action === "mode") {
-      mode = mode === "rect" ? "text" : "rect";
-      btn.setAttribute("data-mode", mode);
+      cycleMode();
       return;
     }
     if (action === "theme") {
-      var isDark = document.documentElement.getAttribute("data-hme-theme") === "dark";
-      var next = isDark ? "light" : "dark";
-      document.documentElement.setAttribute("data-hme-theme", next);
-      try {
-        localStorage.setItem("hme-theme", next);
-      } catch (e) {
-        /* ignore */
-      }
+      toggleTheme();
+      return;
+    }
+  });
+
+  // Keyboard shortcuts: T selection mode, B background, Z undo, Y redo.
+  document.addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var el = e.target;
+    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+    var key = e.key ? e.key.toLowerCase() : "";
+    if (key === "t") {
+      cycleMode();
+      e.preventDefault();
+    } else if (key === "b") {
+      toggleTheme();
+      e.preventDefault();
+    } else if (key === "z") {
+      historyAction("undo");
+      e.preventDefault();
+    } else if (key === "y") {
+      historyAction("redo");
+      e.preventDefault();
+    } else if (deckSlides.length && (key === "arrowright" || key === "arrowdown" || key === "pagedown")) {
+      changeSlide(1);
+      e.preventDefault();
+    } else if (deckSlides.length && (key === "arrowleft" || key === "arrowup" || key === "pageup")) {
+      changeSlide(-1);
+      e.preventDefault();
     }
   });
 
@@ -783,16 +905,20 @@
     pendingCaptureEl = null;
   });
 
+  // Clicking anywhere outside the quick-action bar dismisses the selection.
+  document.addEventListener("pointerdown", function (e) {
+    if (quick.hidden) return;
+    if (quick.contains(e.target)) return;
+    hideQuick();
+    pending = null;
+    pendingCaptureEl = null;
+  });
+
   quick.addEventListener("click", function (e) {
     var b = e.target.closest(".hme-qbtn");
     if (!b) return;
     var kind = b.getAttribute("data-quick");
     hideQuick();
-    if (kind === "cancel") {
-      pending = null;
-      pendingCaptureEl = null;
-      return;
-    }
     if (kind === "edit") {
       openEdit();
       return;
@@ -802,15 +928,22 @@
       return;
     }
     if (kind === "explain") {
-      textarea.value = "Explain the selected text.";
+      textarea.value = "Explain the selected content.";
       submit("explain");
       return;
     }
+    var isNode = pending && pending.mode === "node";
     var instruction =
       kind === "remove"
-        ? "Remove the selected text."
+        ? isNode
+          ? "Remove the selected element."
+          : "Remove the selected text."
         : kind === "less"
-        ? "Say the same thing in a shorter way."
+        ? isNode
+          ? "Make the selected element's content shorter."
+          : "Say the same thing in a shorter way."
+        : isNode
+        ? "Make the selected element's content longer and more detailed."
         : "Say the same thing with more detail.";
     textarea.value = instruction;
     submit("edit");
@@ -822,6 +955,7 @@
       if (mode !== "rect" || e.button !== 0) return;
       if (isEditorNode(e.target)) return;
       dragging = true;
+      e.preventDefault();
       startX = e.clientX;
       startY = e.clientY;
       box.hidden = false;
@@ -831,8 +965,36 @@
     true
   );
 
+  // Stop images/links from being natively dragged while drawing a region.
+  document.addEventListener("dragstart", function (e) {
+    if (dragging) e.preventDefault();
+  }, true);
+
   window.addEventListener("pointermove", function (e) {
-    if (dragging) updateBox(e.clientX, e.clientY);
+    if (dragging) {
+      updateBox(e.clientX, e.clientY);
+      return;
+    }
+    if (mode !== "node") return;
+    if (nodePaused || !popover.hidden || !quick.hidden) {
+      box.hidden = true;
+      return;
+    }
+    if (isEditorNode(e.target)) {
+      box.hidden = true;
+      return;
+    }
+    var el = elementOf(e.target);
+    if (!el || el === document.documentElement || el === document.body) {
+      box.hidden = true;
+      return;
+    }
+    var r = el.getBoundingClientRect();
+    box.hidden = false;
+    box.style.left = r.left + "px";
+    box.style.top = r.top + "px";
+    box.style.width = r.width + "px";
+    box.style.height = r.height + "px";
   });
 
   window.addEventListener("pointerup", function (e) {
@@ -857,6 +1019,8 @@
     true
   );
 
+  textarea.addEventListener("input", autoGrow);
+
   textarea.addEventListener("keydown", function (e) {
     if (e.key === "Escape") {
       closePopover();
@@ -868,7 +1032,24 @@
     }
   });
 
-  cancelBtn.addEventListener("click", function () {
+  // Node mode: clicking an element selects that element.
+  document.addEventListener("click", function (e) {
+    if (mode !== "node" || e.button !== 0) return;
+    if (isEditorNode(e.target)) return;
+    if (nodePaused) {
+      nodePaused = false;
+      return;
+    }
+    var el = elementOf(e.target);
+    if (!el || el === document.documentElement || el === document.body) return;
+    box.hidden = true;
+    finishNode(el);
+  });
+
+  // Clicking outside the popover dismisses it (replaces the old Cancel button).
+  document.addEventListener("pointerdown", function (e) {
+    if (popover.hidden) return;
+    if (popover.contains(e.target)) return;
     closePopover();
     hideQuick();
     popoverMode = "instruction";
@@ -880,18 +1061,15 @@
     submit("edit");
   });
 
-  if (explainBtn) {
-    explainBtn.addEventListener("click", function () {
-      submit("explain");
-    });
-  }
-
-  explainClose.addEventListener("click", function () {
+  explainX.addEventListener("click", function () {
     explain.hidden = true;
   });
 
-  explainX.addEventListener("click", function () {
-    explain.hidden = true;
+  deckPrev.addEventListener("click", function () {
+    changeSlide(-1);
+  });
+  deckNext.addEventListener("click", function () {
+    changeSlide(1);
   });
 
   pin.title = "Waiting for the agent — click to stop";
@@ -899,4 +1077,5 @@
 
   connect();
   refreshHistory();
+  initDeck();
 })();

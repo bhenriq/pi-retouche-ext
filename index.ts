@@ -11,22 +11,23 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
-import { readFile, writeFile, stat, readdir } from "node:fs/promises";
+import { readFile, writeFile, stat, readdir, mkdtemp, rm } from "node:fs/promises";
 import { watchFile, unwatchFile } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
-import { exec } from "node:child_process";
+import { exec, execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep, extname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { isMarkdownPath, isMarpFrontmatter, findSourceSpan, locateSelection } from "./lib/matching";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ASSET_DIR = join(__dirname, "assets");
 const requireAsset = createRequire(import.meta.url);
 
-function isMarkdownPath(path: string): boolean {
-  return /\.(md|markdown|mdown|mkd)$/i.test(path);
-}
+
 
 const ARTIFACT_EXTS = new Set([".html", ".htm", ".md", ".markdown", ".mdown", ".mkd"]);
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".next", ".cache", "vendor"]);
@@ -60,80 +61,6 @@ async function listArtifacts(root: string, maxDepth = 3): Promise<{ path: string
   return out.slice(0, 50);
 }
 
-// Find the selected (rendered) text in the raw source. Falls back to an
-// approximate match that ignores HTML tags and inline Markdown markers, so
-// selections spanning <strong>/**bold**/etc. still resolve to a source span.
-function findSourceSpan(source: string, needle: string): { start: number; end: number } | null {
-  const exact = source.indexOf(needle);
-  if (exact !== -1) return { start: exact, end: exact + needle.length };
-  const map: number[] = [];
-  let plain = "";
-  let i = 0;
-  while (i < source.length) {
-    const ch = source[i];
-    if (ch === "<") {
-      const close = source.indexOf(">", i + 1);
-      if (close !== -1) {
-        i = close + 1;
-        continue;
-      }
-    }
-    if (ch === "*" || ch === "_" || ch === "~" || ch === "`") {
-      i++;
-      continue;
-    }
-    plain += ch;
-    map.push(i);
-    i++;
-  }
-  const p = plain.indexOf(needle);
-  if (p === -1) return null;
-  return { start: map[p], end: map[p + needle.length - 1] + 1 };
-}
-
-// Resolve the exact occurrence of the selection using its element's full
-// text plus the selection's offset within that text. Falls back to a plain
-// search when no positional context is available.
-function locateSelection(
-  source: string,
-  oldText: string,
-  anchorText: string,
-  startOffset: number,
-): { start: number; end: number } | null {
-  if (anchorText && startOffset >= 0) {
-    const anchorSpan = findSourceSpan(source, anchorText);
-    if (anchorSpan) {
-      const map: number[] = [];
-      let plain = "";
-      let i = anchorSpan.start;
-      while (i < anchorSpan.end) {
-        const ch = source[i];
-        if (ch === "<") {
-          const close = source.indexOf(">", i + 1);
-          if (close !== -1) {
-            i = close + 1;
-            continue;
-          }
-        }
-        if (ch === "*" || ch === "_" || ch === "~" || ch === "`") {
-          i++;
-          continue;
-        }
-        plain += ch;
-        map.push(i);
-        i++;
-      }
-      if (
-        startOffset + oldText.length <= map.length &&
-        plain.slice(startOffset, startOffset + oldText.length) === oldText
-      ) {
-        return { start: map[startOffset], end: map[startOffset + oldText.length - 1] + 1 };
-      }
-    }
-  }
-  return findSourceSpan(source, oldText);
-}
-
 function timeAgo(ms: number): string {
   const min = Math.round((Date.now() - ms) / 60000);
   if (min < 1) return "just now";
@@ -157,8 +84,10 @@ function getMarked(): MarkedLib {
 type SendPart = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 
 interface SubmitBody {
-  mode: "rect" | "text";
+  mode: "rect" | "text" | "node";
   kind?: "edit" | "explain";
+  slide?: number;
+  slideTotal?: number;
   instruction: string;
   text?: string;
   rect?: { x: number; y: number; width: number; height: number; pageX: number; pageY: number };
@@ -176,6 +105,7 @@ interface Artifact {
   server: Server;
   rawHash: string;
   markdown: boolean;
+  marpCache?: { hash: string; page: string };
   versions: string[];
   vIndex: number;
   clients: Set<ServerResponse>;
@@ -375,6 +305,57 @@ function renderMarkdownDocument(raw: string, title: string): string {
 </html>`;
 }
 
+const execFileAsync = promisify(execFile);
+
+
+
+function buildMarpDocument(cliHtml: string, title: string): string {
+  const withoutScripts = cliHtml.replace(/<script\b[\s\S]*?<\/script>/gi, "");
+  const head = /<head[^>]*>([\s\S]*?)<\/head>/i.exec(withoutScripts);
+  const bodyMatch = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(withoutScripts);
+  const styles = head ? head[1].match(/<style[^>]*>[\s\S]*?<\/style>/gi) || [] : [];
+  const slides = bodyMatch ? bodyMatch[1] : withoutScripts;
+  return `<!doctype html>
+<html lang="en" data-hme-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  ${styles.join("\n")}
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; }
+    body { overflow: hidden !important; scroll-snap-type: none !important; }
+    svg[data-marpit-svg] { display: none !important; width: 100% !important; height: 100% !important; }
+    svg[data-marpit-svg].hme-slide-active { display: block !important; }
+  </style>
+</head>
+<body>
+${slides}
+</body>
+</html>`;
+}
+
+async function renderMarpPage(raw: string, filePath: string): Promise<string> {
+  const key = hash(raw);
+  if (active?.marpCache && active.marpCache.hash === key) return active.marpCache.page;
+  const tmp = await mkdtemp(join(tmpdir(), "hme-marp-"));
+  const out = join(tmp, "out.html");
+  try {
+    await execFileAsync("marp", [filePath, "--template", "bare", "--allow-local-files", "--no-stdin", "--output", out], { timeout: 30000 });
+    const cliHtml = await readFile(out, "utf8");
+    const page = buildMarpDocument(cliHtml, basename(filePath));
+    if (active) active.marpCache = { hash: key, page };
+    return page;
+  } catch {
+    // Marp CLI unavailable or failed: fall back to plain Markdown rendering.
+    const fallback = renderMarkdownDocument(raw, basename(filePath));
+    if (active) active.marpCache = { hash: key, page: fallback };
+    return fallback;
+  } finally {
+    await rm(tmp, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 function openBrowser(url: string): void {
   if (process.env.HME_NO_BROWSER) return;
   const platform = process.platform;
@@ -408,9 +389,21 @@ function buildPrompt(artifact: Artifact, body: SubmitBody): SendPart[] {
         `Primary matched element bounds: x=${Math.round(body.primaryRect.x)} y=${Math.round(body.primaryRect.y)} width=${Math.round(body.primaryRect.width)} height=${Math.round(body.primaryRect.height)}`,
       );
     }
+  } else if (body.mode === "node") {
+    lines.push("", "Mode: element (HTML node) selection.");
+    if (body.primaryRect) {
+      lines.push(
+        `Element bounds: x=${Math.round(body.primaryRect.x)} y=${Math.round(body.primaryRect.y)} width=${Math.round(body.primaryRect.width)} height=${Math.round(body.primaryRect.height)}`,
+      );
+    }
   } else {
     lines.push("", "Mode: text selection.");
     lines.push("Selected text:", "```text", (body.text ?? "").slice(0, 8000), "```");
+  }
+
+  if (typeof body.slide === "number" && body.slide >= 0) {
+    const total = typeof body.slideTotal === "number" && body.slideTotal > 0 ? ` of ${body.slideTotal}` : "";
+    lines.push("", `Slide: ${body.slide + 1}${total}.`);
   }
 
   if (isMd) {
@@ -632,9 +625,21 @@ async function handleRequest(
       sendJson(res, 404, { error: "artifact unavailable" });
       return;
     }
-    const isMd = isMarkdownPath(artifact.path);
-    const page = isMd ? renderMarkdownDocument(raw, basename(artifact.path)) : raw;
     res.setHeader("Set-Cookie", `hme_token=${artifact.token}; HttpOnly; SameSite=Lax; Path=/`);
+    // Keep the access token out of the address bar: once the cookie is set,
+    // redirect the tokenized URL to the clean /<filename> URL.
+    if (url.searchParams.has("t")) {
+      res.writeHead(302, { Location: artifactPath });
+      res.end();
+      return;
+    }
+    const isMd = isMarkdownPath(artifact.path);
+    const page =
+      isMd && isMarpFrontmatter(raw)
+        ? await renderMarpPage(raw, artifact.path)
+        : isMd
+        ? renderMarkdownDocument(raw, basename(artifact.path))
+        : raw;
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(injectEditor(page, artifact.token, isMd));
     return;
@@ -647,7 +652,13 @@ async function handleRequest(
       sendJson(res, 404, { error: "artifact unavailable" });
       return;
     }
-    const page = isMarkdownPath(artifact.path) ? renderMarkdownDocument(raw, basename(artifact.path)) : raw;
+    const isMd = isMarkdownPath(artifact.path);
+    const page =
+      isMd && isMarpFrontmatter(raw)
+        ? await renderMarpPage(raw, artifact.path)
+        : isMd
+        ? renderMarkdownDocument(raw, basename(artifact.path))
+        : raw;
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(page);
     return;
@@ -781,7 +792,7 @@ async function handleRequest(
       sendJson(res, 400, { error: "instruction required" });
       return;
     }
-    if (body.mode !== "rect" && body.mode !== "text") {
+    if (body.mode !== "rect" && body.mode !== "text" && body.mode !== "node") {
       sendJson(res, 400, { error: "invalid mode" });
       return;
     }
