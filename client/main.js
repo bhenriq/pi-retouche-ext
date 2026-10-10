@@ -652,6 +652,7 @@ import { CSS } from "./styles.js";
     var newText = textarea.value;
     var anchorText = pending.anchorText;
     var startOffset = pending.startOffset;
+    var slide = pendingCaptureEl ? slideOf(pendingCaptureEl) : -1;
     busy = true;
     closePopover();
     hideQuick();
@@ -667,7 +668,7 @@ import { CSS } from "./styles.js";
     fetch("/__replace?t=" + encodeURIComponent(TOKEN), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ oldText: oldText, newText: newText, anchorText: anchorText, startOffset: startOffset }),
+      body: JSON.stringify({ oldText: oldText, newText: newText, anchorText: anchorText, startOffset: startOffset, slide: slide }),
     })
       .then(function (res) {
         return res

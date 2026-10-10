@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep, extname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { isMarkdownPath, isMarpFrontmatter, findSourceSpan, locateSelection } from "./lib/matching";
+import { isMarkdownPath, isMarpFrontmatter, findSourceSpan, locateSelection, slideSourceRegion } from "./lib/matching";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -708,9 +708,9 @@ async function handleRequest(
   // new text. The file watcher records the version and broadcasts the change.
   if (pathname === "/__replace" && req.method === "POST") {
     const rawBody = await readBody(req, 4 * 1024 * 1024);
-    let body: { oldText?: unknown; newText?: unknown; anchorText?: unknown; startOffset?: unknown };
+    let body: { oldText?: unknown; newText?: unknown; anchorText?: unknown; startOffset?: unknown; slide?: unknown };
     try {
-      body = JSON.parse(rawBody) as { oldText?: unknown; newText?: unknown; anchorText?: unknown; startOffset?: unknown };
+      body = JSON.parse(rawBody) as { oldText?: unknown; newText?: unknown; anchorText?: unknown; startOffset?: unknown; slide?: unknown };
     } catch {
       sendJson(res, 400, { error: "invalid json" });
       return;
@@ -719,6 +719,7 @@ async function handleRequest(
     const newText = typeof body.newText === "string" ? body.newText : "";
     const anchorText = typeof body.anchorText === "string" ? body.anchorText : "";
     const startOffset = typeof body.startOffset === "number" ? body.startOffset : -1;
+    const slide = typeof body.slide === "number" ? body.slide : -1;
     if (!oldText) {
       sendJson(res, 400, { error: "oldText required" });
       return;
@@ -731,12 +732,31 @@ async function handleRequest(
       sendJson(res, 404, { error: "artifact unavailable" });
       return;
     }
-    const span = locateSelection(content, oldText, anchorText, startOffset);
+    let search = content;
+    let offset = 0;
+    if (slide >= 0) {
+      const region = slideSourceRegion(content, slide);
+      if (region) {
+        search = content.slice(region.start, region.end);
+        offset = region.start;
+      }
+    }
+
+    // Prefer the slide-scoped match; fall back to the whole file so frontmatter
+    // text (e.g. the header) can still be edited when it isn't on the slide.
+    let span = locateSelection(search, oldText, anchorText, startOffset);
+    if (!span && offset !== 0) {
+      search = content;
+      offset = 0;
+      span = locateSelection(search, oldText, anchorText, startOffset);
+    }
     if (!span) {
       sendJson(res, 409, { error: "selected text wasn't found in the source; use Other to instruct the agent" });
       return;
     }
-    const updated = content.slice(0, span.start) + newText + content.slice(span.end);
+    const absStart = span.start + offset;
+    const absEnd = span.end + offset;
+    const updated = content.slice(0, absStart) + newText + content.slice(absEnd);
     try {
       await writeFile(targetPath, updated, "utf8");
     } catch (err) {

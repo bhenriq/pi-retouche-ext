@@ -75,6 +75,23 @@ export function findSourceSpan(source: string, needle: string): { start: number;
  * Resolve the exact occurrence of the selection using its element's full text
  * plus the selection's offset within that text. Falls back to findSourceSpan.
  */
+/**
+ * Return the source range of one Marp slide (0-based index) between its
+ * `---` separators, or null when the deck has no such slide.
+ */
+export function slideSourceRegion(source: string, slideIndex: number): { start: number; end: number } | null {
+  const seps: number[] = [];
+  let pos = 0;
+  for (const line of source.split("\n")) {
+    if (line.trim() === "---") seps.push(pos);
+    pos += line.length + 1;
+  }
+  const open = seps[slideIndex + 1];
+  const close = seps[slideIndex + 2];
+  if (open === undefined || close === undefined) return null;
+  return { start: open, end: close };
+}
+
 export function locateSelection(
   source: string,
   oldText: string,

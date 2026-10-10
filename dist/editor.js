@@ -594,6 +594,7 @@
       var newText = textarea.value;
       var anchorText = pending.anchorText;
       var startOffset = pending.startOffset;
+      var slide = pendingCaptureEl ? slideOf(pendingCaptureEl) : -1;
       busy = true;
       closePopover();
       hideQuick();
@@ -608,7 +609,7 @@
       fetch("/__replace?t=" + encodeURIComponent(TOKEN), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ oldText, newText, anchorText, startOffset })
+        body: JSON.stringify({ oldText, newText, anchorText, startOffset, slide })
       }).then(function(res) {
         return res.json().catch(function() {
           return null;
