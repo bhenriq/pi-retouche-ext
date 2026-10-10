@@ -753,7 +753,7 @@ async function handleRequest(
   // Editor client script.
   if (pathname === "/__editor/editor.js" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" });
-    res.end(await readFile(join(__dirname, "editor.js"), "utf8"));
+    res.end(await readFile(join(__dirname, "dist", "editor.js"), "utf8"));
     return;
   }
 

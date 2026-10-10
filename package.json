@@ -1,0 +1,13 @@
+{
+  "name": "html-editor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Visual, agent-driven editing for HTML and Markdown artifacts (pi extension)",
+  "scripts": {
+    "build:client": "esbuild client/main.js --bundle --format=iife --outfile=dist/editor.js",
+    "test": "node lib/matching.test.cjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
