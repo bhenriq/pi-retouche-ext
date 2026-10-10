@@ -64,12 +64,30 @@ import { CSS } from "./styles.js";
     '<div class="hme-actions"><span class="hme-hint">\u2318\u21b5 to send</span><button class="hme-send" title="Send" aria-label="Send"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 1.5 7.5 14.5 6 9 1.5 7.5z"/><path d="m14.5 1.5-7 7"/></svg></button></div>' +
     "</div>" +
     '<div class="hme-quick" data-hme-editor hidden>' +
-    '<button class="hme-qbtn" data-quick="remove">Remove</button>' +
-    '<button class="hme-qbtn" data-quick="less">Less</button>' +
-    '<button class="hme-qbtn" data-quick="more">More</button>' +
-    '<button class="hme-qbtn" data-quick="edit">Edit</button>' +
-    '<button class="hme-qbtn" data-quick="other">Other</button>' +
-    '<button class="hme-qbtn" data-quick="explain">Explain</button>' +
+    '<button class="hme-qbtn" data-quick="remove" title="Remove [R]">' +
+      '<svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11M6.2 4.5v-.9a1.1 1.1 0 0 1 1.1-1.1h1.4a1.1 1.1 0 0 1 1.1 1.1v.9M3.9 4.5l.55 8a1.35 1.35 0 0 0 1.34 1.25h4.42a1.35 1.35 0 0 0 1.34-1.25l.55-8"/></svg>' +
+      '<span class="hme-qlabel">Remove</span><kbd class="hme-qkbd">R</kbd>' +
+    '</button>' +
+    '<button class="hme-qbtn" data-quick="less" title="Less [L]">' +
+      '<svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.8 8H5.2M8.4 5.6 11 8l-2.6 2.4M7.6 5.6 5 8l2.6 2.4"/></svg>' +
+      '<span class="hme-qlabel">Less</span><kbd class="hme-qkbd">L</kbd>' +
+    '</button>' +
+    '<button class="hme-qbtn" data-quick="more" title="More [M]">' +
+      '<svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.2 8h5.6M7.6 5.6 5 8l2.6 2.4M8.4 5.6 11 8l-2.6 2.4"/></svg>' +
+      '<span class="hme-qlabel">More</span><kbd class="hme-qkbd">M</kbd>' +
+    '</button>' +
+    '<button class="hme-qbtn" data-quick="edit" title="Edit [E]">' +
+      '<svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.7 3.4 12.6 6.3 6.6 12.3a.6.6 0 0 1-.25.15l-2.95.77.77-2.95a.6.6 0 0 1 .15-.25z"/></svg>' +
+      '<span class="hme-qlabel">Edit</span><kbd class="hme-qkbd">E</kbd>' +
+    '</button>' +
+    '<button class="hme-qbtn" data-quick="other" title="Other [O]">' +
+      '<svg class="hme-qicon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg>' +
+      '<span class="hme-qlabel">Other</span><kbd class="hme-qkbd">O</kbd>' +
+    '</button>' +
+    '<button class="hme-qbtn" data-quick="explain" title="Explain [X]">' +
+      '<svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2a3.8 3.8 0 0 0-1.5 7.3c.35.15.5.45.5.8v.9a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-.9c0-.35.15-.65.5-.8A3.8 3.8 0 0 0 8 2z"/><path d="M6.8 13h2.4"/></svg>' +
+      '<span class="hme-qlabel">Explain</span><kbd class="hme-qkbd">X</kbd>' +
+    '</button>' +
     "</div>" +
     '<div class="hme-explain" data-hme-editor hidden>' +
     '<div class="hme-explain-head"><span>Explanation</span><button class="hme-explain-x" aria-label="Close">\u00d7</button></div>' +
@@ -836,6 +854,13 @@ import { CSS } from "./styles.js";
     } else if (deckSlides.length && (key === "arrowleft" || key === "arrowup" || key === "pageup")) {
       changeSlide(-1);
       e.preventDefault();
+    } else if (!quick.hidden) {
+      var quickKeyToAction = { r: "remove", l: "less", m: "more", e: "edit", o: "other", x: "explain" };
+      var quickKind = quickKeyToAction[key];
+      if (quickKind) {
+        runQuickAction(quickKind);
+        e.preventDefault();
+      }
     }
   });
 
@@ -862,10 +887,7 @@ import { CSS } from "./styles.js";
     pendingCaptureEl = null;
   });
 
-  quick.addEventListener("click", function (e) {
-    var b = e.target.closest(".hme-qbtn");
-    if (!b) return;
-    var kind = b.getAttribute("data-quick");
+  function runQuickAction(kind) {
     hideQuick();
     if (kind === "edit") {
       openEdit();
@@ -895,6 +917,12 @@ import { CSS } from "./styles.js";
         : "Say the same thing with more detail.";
     textarea.value = instruction;
     submit("edit");
+  }
+
+  quick.addEventListener("click", function (e) {
+    var b = e.target.closest(".hme-qbtn");
+    if (!b) return;
+    runQuickAction(b.getAttribute("data-quick"));
   });
 
   document.addEventListener(

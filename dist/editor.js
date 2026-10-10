@@ -33,8 +33,12 @@
     ".hme-send svg{width:16px;height:16px;display:block}",
     ".hme-send:disabled{opacity:.5;cursor:default}",
     ".hme-quick{position:fixed;display:flex;flex-direction:column;gap:2px;background:#111827;padding:4px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.4)}",
-    ".hme-qbtn{color:#e5e7eb;background:transparent;border:0;padding:6px 14px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600;text-align:left}",
+    ".hme-qbtn{display:flex;align-items:center;gap:8px;min-width:140px;color:#e5e7eb;background:transparent;border:0;padding:6px 9px;border-radius:6px;cursor:pointer;font:inherit;font-weight:600;text-align:left}",
     ".hme-qbtn:hover{background:#374151;color:#fff}",
+    ".hme-qicon{width:15px;height:15px;flex:0 0 15px;display:block}",
+    ".hme-qlabel{flex:1 1 auto;margin-right:12px}",
+    ".hme-qkbd{font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;color:#9ca3af;background:#1f2937;border:1px solid #374151;border-radius:4px;padding:1px 5px}",
+    ".hme-qbtn:hover .hme-qkbd{color:#e5e7eb;background:#111827}",
     ".hme-explain{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 32px));max-height:75vh;display:flex;flex-direction:column;overflow:hidden;background:#fff;color:#111827;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.45)}",
     ".hme-explain-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 10px 10px 18px;border-bottom:1px solid #e5e7eb;font:600 14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif}",
     ".hme-explain-x{background:transparent;border:0;color:#6b7280;font-size:22px;line-height:1;padding:0 8px;border-radius:6px;cursor:pointer}",
@@ -112,7 +116,7 @@
     document.head.appendChild(styleEl);
     var root = document.createElement("div");
     root.setAttribute("data-hme-overlay", "");
-    root.innerHTML = '<div class="hme-toolbar" data-hme-editor><button class="hme-btn hme-mode" data-action="mode" data-mode="text" title="Toggle selection mode (region / text / node) [T]" aria-label="Toggle selection mode"><svg class="hme-icon hme-icon-rect" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke-dasharray="3 2"/></svg><svg class="hme-icon hme-icon-text" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h12v3.2h-1.2c-.3-1.3-.8-1.7-2.2-1.7H9.2v8.4c0 1.2.2 1.4 1.6 1.6V15H5.2v-1.5c1.4-.2 1.6-.4 1.6-1.6V3.5H5.4c-1.4 0-1.9.4-2.2 1.7H2V2z"/></svg><svg class="hme-icon hme-icon-node" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg></button><button class="hme-btn" data-action="undo" title="Undo last file change [Z]" disabled>\u21B6</button><button class="hme-btn" data-action="redo" title="Redo [Y]" disabled>\u21B7</button><button class="hme-btn hme-theme" data-action="theme" title="Toggle dark / light [B]"><svg class="hme-icon hme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.8A5.8 5.8 0 0 1 6.2 2.5a6 6 0 1 0 7.3 7.3z"/></svg><svg class="hme-icon hme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M2.9 2.9l1.1 1.1M12 12l1.1 1.1M13.1 2.9L12 4M4 12l-1.1 1.1"/></svg></button></div><div class="hme-box" data-hme-editor hidden></div><div class="hme-popover" data-hme-editor hidden><textarea placeholder="What should I change here?"></textarea><div class="hme-actions"><span class="hme-hint">\u2318\u21B5 to send</span><button class="hme-send" title="Send" aria-label="Send"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 1.5 7.5 14.5 6 9 1.5 7.5z"/><path d="m14.5 1.5-7 7"/></svg></button></div></div><div class="hme-quick" data-hme-editor hidden><button class="hme-qbtn" data-quick="remove">Remove</button><button class="hme-qbtn" data-quick="less">Less</button><button class="hme-qbtn" data-quick="more">More</button><button class="hme-qbtn" data-quick="edit">Edit</button><button class="hme-qbtn" data-quick="other">Other</button><button class="hme-qbtn" data-quick="explain">Explain</button></div><div class="hme-explain" data-hme-editor hidden><div class="hme-explain-head"><span>Explanation</span><button class="hme-explain-x" aria-label="Close">\xD7</button></div><div class="hme-explain-body"></div></div><div class="hme-deck" data-hme-editor hidden><button class="hme-deck-prev" aria-label="Previous slide">\u2039</button><span class="hme-deck-pos"></span><button class="hme-deck-next" aria-label="Next slide">\u203A</button></div><div class="hme-pin" data-hme-editor hidden><span class="hme-spin"></span></div><div class="hme-toast" data-hme-editor hidden></div>';
+    root.innerHTML = '<div class="hme-toolbar" data-hme-editor><button class="hme-btn hme-mode" data-action="mode" data-mode="text" title="Toggle selection mode (region / text / node) [T]" aria-label="Toggle selection mode"><svg class="hme-icon hme-icon-rect" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke-dasharray="3 2"/></svg><svg class="hme-icon hme-icon-text" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 2h12v3.2h-1.2c-.3-1.3-.8-1.7-2.2-1.7H9.2v8.4c0 1.2.2 1.4 1.6 1.6V15H5.2v-1.5c1.4-.2 1.6-.4 1.6-1.6V3.5H5.4c-1.4 0-1.9.4-2.2 1.7H2V2z"/></svg><svg class="hme-icon hme-icon-node" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/><path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg></button><button class="hme-btn" data-action="undo" title="Undo last file change [Z]" disabled>\u21B6</button><button class="hme-btn" data-action="redo" title="Redo [Y]" disabled>\u21B7</button><button class="hme-btn hme-theme" data-action="theme" title="Toggle dark / light [B]"><svg class="hme-icon hme-icon-moon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 9.8A5.8 5.8 0 0 1 6.2 2.5a6 6 0 1 0 7.3 7.3z"/></svg><svg class="hme-icon hme-icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M2.9 2.9l1.1 1.1M12 12l1.1 1.1M13.1 2.9L12 4M4 12l-1.1 1.1"/></svg></button></div><div class="hme-box" data-hme-editor hidden></div><div class="hme-popover" data-hme-editor hidden><textarea placeholder="What should I change here?"></textarea><div class="hme-actions"><span class="hme-hint">\u2318\u21B5 to send</span><button class="hme-send" title="Send" aria-label="Send"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 1.5 7.5 14.5 6 9 1.5 7.5z"/><path d="m14.5 1.5-7 7"/></svg></button></div></div><div class="hme-quick" data-hme-editor hidden><button class="hme-qbtn" data-quick="remove" title="Remove [R]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11M6.2 4.5v-.9a1.1 1.1 0 0 1 1.1-1.1h1.4a1.1 1.1 0 0 1 1.1 1.1v.9M3.9 4.5l.55 8a1.35 1.35 0 0 0 1.34 1.25h4.42a1.35 1.35 0 0 0 1.34-1.25l.55-8"/></svg><span class="hme-qlabel">Remove</span><kbd class="hme-qkbd">R</kbd></button><button class="hme-qbtn" data-quick="less" title="Less [L]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.8 8H5.2M8.4 5.6 11 8l-2.6 2.4M7.6 5.6 5 8l2.6 2.4"/></svg><span class="hme-qlabel">Less</span><kbd class="hme-qkbd">L</kbd></button><button class="hme-qbtn" data-quick="more" title="More [M]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.2 8h5.6M7.6 5.6 5 8l2.6 2.4M8.4 5.6 11 8l-2.6 2.4"/></svg><span class="hme-qlabel">More</span><kbd class="hme-qkbd">M</kbd></button><button class="hme-qbtn" data-quick="edit" title="Edit [E]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.7 3.4 12.6 6.3 6.6 12.3a.6.6 0 0 1-.25.15l-2.95.77.77-2.95a.6.6 0 0 1 .15-.25z"/></svg><span class="hme-qlabel">Edit</span><kbd class="hme-qkbd">E</kbd></button><button class="hme-qbtn" data-quick="other" title="Other [O]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/></svg><span class="hme-qlabel">Other</span><kbd class="hme-qkbd">O</kbd></button><button class="hme-qbtn" data-quick="explain" title="Explain [X]"><svg class="hme-qicon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2a3.8 3.8 0 0 0-1.5 7.3c.35.15.5.45.5.8v.9a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-.9c0-.35.15-.65.5-.8A3.8 3.8 0 0 0 8 2z"/><path d="M6.8 13h2.4"/></svg><span class="hme-qlabel">Explain</span><kbd class="hme-qkbd">X</kbd></button></div><div class="hme-explain" data-hme-editor hidden><div class="hme-explain-head"><span>Explanation</span><button class="hme-explain-x" aria-label="Close">\xD7</button></div><div class="hme-explain-body"></div></div><div class="hme-deck" data-hme-editor hidden><button class="hme-deck-prev" aria-label="Previous slide">\u2039</button><span class="hme-deck-pos"></span><button class="hme-deck-next" aria-label="Next slide">\u203A</button></div><div class="hme-pin" data-hme-editor hidden><span class="hme-spin"></span></div><div class="hme-toast" data-hme-editor hidden></div>';
     document.body.appendChild(root);
     var toolbar = root.querySelector(".hme-toolbar");
     var undoBtn = toolbar.querySelector('[data-action="undo"]');
@@ -741,6 +745,13 @@
       } else if (deckSlides.length && (key === "arrowleft" || key === "arrowup" || key === "pageup")) {
         changeSlide(-1);
         e.preventDefault();
+      } else if (!quick.hidden) {
+        var quickKeyToAction = { r: "remove", l: "less", m: "more", e: "edit", o: "other", x: "explain" };
+        var quickKind = quickKeyToAction[key];
+        if (quickKind) {
+          runQuickAction(quickKind);
+          e.preventDefault();
+        }
       }
     });
     document.addEventListener("keydown", function(e) {
@@ -761,10 +772,7 @@
       pending = null;
       pendingCaptureEl = null;
     });
-    quick.addEventListener("click", function(e) {
-      var b = e.target.closest(".hme-qbtn");
-      if (!b) return;
-      var kind = b.getAttribute("data-quick");
+    function runQuickAction(kind) {
       hideQuick();
       if (kind === "edit") {
         openEdit();
@@ -783,6 +791,11 @@
       var instruction = kind === "remove" ? isNode ? "Remove the selected element." : "Remove the selected text." : kind === "less" ? isNode ? "Make the selected element's content shorter." : "Say the same thing in a shorter way." : isNode ? "Make the selected element's content longer and more detailed." : "Say the same thing with more detail.";
       textarea.value = instruction;
       submit("edit");
+    }
+    quick.addEventListener("click", function(e) {
+      var b = e.target.closest(".hme-qbtn");
+      if (!b) return;
+      runQuickAction(b.getAttribute("data-quick"));
     });
     document.addEventListener(
       "pointerdown",
