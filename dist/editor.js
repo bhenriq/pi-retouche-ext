@@ -117,6 +117,7 @@
     var toolbar = root.querySelector(".hme-toolbar");
     var undoBtn = toolbar.querySelector('[data-action="undo"]');
     var redoBtn = toolbar.querySelector('[data-action="redo"]');
+    var themeBtn = toolbar.querySelector('[data-action="theme"]');
     var box = root.querySelector(".hme-box");
     var popover = root.querySelector(".hme-popover");
     var quick = root.querySelector(".hme-quick");
@@ -139,6 +140,7 @@
     var nodePaused = false;
     var deckSlides = [];
     var deckIndex = 0;
+    var isDeck = false;
     function isEditorNode(el) {
       return !!(el && el.closest && el.closest("[data-hme-editor]"));
     }
@@ -347,6 +349,9 @@
     }
     function initDeck() {
       deckSlides = Array.prototype.slice.call(document.querySelectorAll("svg[data-marpit-svg]"));
+      isDeck = deckSlides.length > 0;
+      themeBtn.hidden = isDeck;
+      themeBtn.title = isDeck ? "This deck uses its own Marp theme" : "Toggle dark / light [B]";
       if (!deckSlides.length) {
         deck.hidden = true;
         return;
@@ -687,6 +692,7 @@
       setMode(mode === "rect" ? "text" : mode === "text" ? "node" : "rect");
     }
     function toggleTheme() {
+      if (isDeck) return;
       var isDark = document.documentElement.getAttribute("data-hme-theme") === "dark";
       var next = isDark ? "light" : "dark";
       document.documentElement.setAttribute("data-hme-theme", next);
