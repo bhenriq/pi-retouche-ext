@@ -696,13 +696,16 @@ import { CSS } from "./styles.js";
   // Refresh (file changed on disk → re-render, preserving the overlay)
   // -------------------------------------------------------------------------
 
+  var applySeq = 0;
   function applySource() {
+    var seq = ++applySeq;
     fetch("/__source?t=" + encodeURIComponent(TOKEN))
       .then(function (res) {
         if (!res.ok) throw new Error("source refused (" + res.status + ")");
         return res.text();
       })
       .then(function (raw) {
+        if (seq !== applySeq) return; // a newer applySource superseded this one
         var doc = new DOMParser().parseFromString(raw, "text/html");
 
         // Reconcile <head> while keeping any editor-owned nodes.

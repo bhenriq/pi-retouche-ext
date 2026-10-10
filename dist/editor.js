@@ -627,11 +627,14 @@
         openPopover(popoverLoc.x, popoverLoc.y);
       });
     }
+    var applySeq = 0;
     function applySource() {
+      var seq = ++applySeq;
       fetch("/__source?t=" + encodeURIComponent(TOKEN)).then(function(res) {
         if (!res.ok) throw new Error("source refused (" + res.status + ")");
         return res.text();
       }).then(function(raw) {
+        if (seq !== applySeq) return;
         var doc = new DOMParser().parseFromString(raw, "text/html");
         var tags = { link: 1, style: 1, title: 1, meta: 1 };
         var headChildren = Array.prototype.slice.call(document.head.children);
