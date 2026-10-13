@@ -83,7 +83,10 @@ export function buildMarpDocument(cliHtml: string, title: string): string {
   const head = /<head[^>]*>([\s\S]*?)<\/head>/i.exec(withoutScripts);
   const bodyMatch = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(withoutScripts);
   const styles = head ? head[1].match(/<style[^>]*>[\s\S]*?<\/style>/gi) || [] : [];
-  const slides = bodyMatch ? bodyMatch[1] : withoutScripts;
+  const slides = (bodyMatch ? bodyMatch[1] : withoutScripts)
+    // The Marp default template ships its own on-screen controller ("Page N of
+    // M"). Strip it so the caller's deck navigation is the only one shown.
+    .replace(/<div\s+class="bespoke-marp-osc"[^>]*>[\s\S]*?<\/div>\s*/i, "");
   return `<!doctype html>
 <html lang="en" data-hme-theme="dark">
 <head>

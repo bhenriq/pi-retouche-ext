@@ -19,7 +19,7 @@ import { dirname, join, resolve, sep, extname, basename, relative } from "node:p
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { isMarkdownPath, isMarpFrontmatter, findSourceSpan, locateSelection, slideSourceRegion } from "./lib/matching";
-import { renderMarkdownDocument, renderMarpPage } from "./lib/render";
+import { renderMarkdownDocument, renderMarpPage, buildMarpDocument } from "./lib/render";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -31,7 +31,7 @@ const requireAsset = createRequire(import.meta.url);
 const ARTIFACT_EXTS = new Set([".html", ".htm", ".md", ".markdown", ".mdown", ".mkd"]);
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", ".next", ".cache", "vendor"]);
 
-async function listArtifacts(root: string, maxDepth = 3): Promise<{ path: string; mtime: number }[]> {
+async function listArtifacts(root: string, maxDepth = 5): Promise<{ path: string; mtime: number }[]> {
   const out: { path: string; mtime: number }[] = [];
   async function walk(dir: string, depth: number): Promise<void> {
     let entries;
@@ -492,6 +492,28 @@ async function stopServer(): Promise<void> {
 // Request handling
 // ---------------------------------------------------------------------------
 
+/**
+ * Resolve an artifact on disk to the HTML retouche serves:
+ * - Markdown Marp decks render through the Marp CLI with `--template bare`.
+ * - Other Markdown renders to a plain document.
+ * - Pre-rendered HTML Marp decks are sanitised so their built-in on-screen
+ *   controller is removed and only retouche's deck navigation remains.
+ * - Any other HTML is served as-is.
+ */
+async function renderArtifactHtml(artifact: Artifact, raw: string): Promise<string> {
+  const isMd = isMarkdownPath(artifact.path);
+  if (isMd && isMarpFrontmatter(raw)) {
+    return renderMarpPage(raw, artifact.path, getMarked(), (artifact.marpCache ??= {}));
+  }
+  if (isMd) {
+    return renderMarkdownDocument(raw, basename(artifact.path), getMarked());
+  }
+  if (/data-marpit-svg/i.test(raw)) {
+    return buildMarpDocument(raw, basename(artifact.path));
+  }
+  return raw;
+}
+
 async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -526,15 +548,9 @@ async function handleRequest(
       res.end();
       return;
     }
-    const isMd = isMarkdownPath(artifact.path);
-    const page =
-      isMd && isMarpFrontmatter(raw)
-        ? await renderMarpPage(raw, artifact.path, getMarked(), (artifact.marpCache ??= {}))
-        : isMd
-        ? renderMarkdownDocument(raw, basename(artifact.path), getMarked())
-        : raw;
+    const page = await renderArtifactHtml(artifact, raw);
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(injectEditor(page, artifact.token, isMd));
+    res.end(injectEditor(page, artifact.token, isMarkdownPath(artifact.path)));
     return;
   }
 
@@ -545,13 +561,7 @@ async function handleRequest(
       sendJson(res, 404, { error: "artifact unavailable" });
       return;
     }
-    const isMd = isMarkdownPath(artifact.path);
-    const page =
-      isMd && isMarpFrontmatter(raw)
-        ? await renderMarpPage(raw, artifact.path, getMarked(), (artifact.marpCache ??= {}))
-        : isMd
-        ? renderMarkdownDocument(raw, basename(artifact.path), getMarked())
-        : raw;
+    const page = await renderArtifactHtml(artifact, raw);
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(page);
     return;

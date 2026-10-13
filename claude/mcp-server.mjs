@@ -32,7 +32,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   isMarkdownPath, isMarpFrontmatter, findSourceSpan, locateSelection, slideSourceRegion,
-  renderMarkdownDocument, renderMarpPage,
+  renderMarkdownDocument, renderMarpPage, buildMarpDocument,
 } from "../lib/engine.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -74,7 +74,7 @@ const CONTENT_TYPES = {
 };
 const SERVEABLE = new Set(Object.keys(CONTENT_TYPES));
 
-async function listArtifacts(root, maxDepth = 3) {
+async function listArtifacts(root, maxDepth = 5) {
   const out = [];
   async function walk(dir, depth) {
     let entries;
@@ -109,6 +109,9 @@ async function renderPage(filePath, raw) {
     if (isMarpFrontmatter(raw)) return renderMarpPage(raw, filePath, marked, active.marpCache);
     return renderMarkdownDocument(raw, basename(filePath), marked);
   }
+  // A pre-rendered Marp HTML deck carries its own on-screen controller;
+  // sanitise it so retouche's deck navigation is the only one shown.
+  if (/data-marpit-svg/i.test(raw)) return buildMarpDocument(raw, basename(filePath));
   return raw;
 }
 
