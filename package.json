@@ -1,8 +1,11 @@
 {
-  "name": "retouche",
+  "name": "pi-retouche-ext",
   "version": "1.0.0",
   "private": true,
   "description": "Visual, agent-driven editing for HTML and Markdown artifacts (pi extension)",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
   "scripts": {
     "build": "npm run build:client && npm run build:engine",
     "build:client": "esbuild client/main.js --bundle --format=iife --outfile=dist/editor.js",
