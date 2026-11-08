@@ -1,5 +1,5 @@
 {
-  "name": "pi-retouche-ext",
+  "name": "pi-retouche",
   "version": "1.0.0",
   "private": true,
   "description": "Visual, agent-driven editing for HTML and Markdown artifacts (pi extension)",
