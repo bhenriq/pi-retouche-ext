@@ -90,6 +90,8 @@
     var currentScript = document.currentScript;
     if (!currentScript) return;
     var scriptUrl = new URL(currentScript.src, location.href);
+    var BASE = scriptUrl.pathname.replace(/\/__editor\/editor\.js$/, "");
+    if (BASE === scriptUrl.pathname) BASE = "";
     var TOKEN = scriptUrl.searchParams.get("t") || "";
     var MD = scriptUrl.searchParams.get("md") === "1";
     if (!TOKEN) return;
@@ -325,7 +327,7 @@
       if (redoBtn) redoBtn.disabled = !state.canRedo;
     }
     function historyAction(kind) {
-      fetch("/__" + kind + "?t=" + encodeURIComponent(TOKEN), { method: "POST" }).then(function(res) {
+      fetch(BASE + "/__" + kind + "?t=" + encodeURIComponent(TOKEN), { method: "POST" }).then(function(res) {
         return res.json().catch(function() {
           return null;
         }).then(function(body) {
@@ -339,7 +341,7 @@
       });
     }
     function refreshHistory() {
-      fetch("/__history?t=" + encodeURIComponent(TOKEN)).then(function(res) {
+      fetch(BASE + "/__history?t=" + encodeURIComponent(TOKEN)).then(function(res) {
         return res.ok ? res.json() : null;
       }).then(function(state) {
         updateHistoryButtons(state);
@@ -532,7 +534,7 @@
       return new Promise(function(resolve, reject) {
         if (window.htmlToImage) return resolve();
         var s = document.createElement("script");
-        s.src = "/__editor/html-to-image.js?t=" + encodeURIComponent(TOKEN);
+        s.src = BASE + "/__editor/html-to-image.js?t=" + encodeURIComponent(TOKEN);
         s.onload = function() {
           resolve();
         };
@@ -603,7 +605,7 @@
         });
       }
       work.then(function() {
-        return fetch("/__submit?t=" + encodeURIComponent(TOKEN), {
+        return fetch(BASE + "/__submit?t=" + encodeURIComponent(TOKEN), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
@@ -638,7 +640,7 @@
         settle();
         showToast("Timed out waiting for the file to update.", true);
       }, 15e3);
-      fetch("/__replace?t=" + encodeURIComponent(TOKEN), {
+      fetch(BASE + "/__replace?t=" + encodeURIComponent(TOKEN), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ oldText, newText, anchorText, startOffset, slide })
@@ -663,7 +665,7 @@
     var applySeq = 0;
     function applySource() {
       var seq = ++applySeq;
-      fetch("/__source?t=" + encodeURIComponent(TOKEN)).then(function(res) {
+      fetch(BASE + "/__source?t=" + encodeURIComponent(TOKEN)).then(function(res) {
         if (!res.ok) throw new Error("source refused (" + res.status + ")");
         return res.text();
       }).then(function(raw) {
@@ -689,7 +691,7 @@
       });
     }
     function connect() {
-      var es = new EventSource("/__events?t=" + encodeURIComponent(TOKEN));
+      var es = new EventSource(BASE + "/__events?t=" + encodeURIComponent(TOKEN));
       es.onmessage = function(ev) {
         try {
           var msg = JSON.parse(ev.data);

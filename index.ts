@@ -11,7 +11,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
-import { readFile, writeFile, stat, readdir } from "node:fs/promises";
+import { readFile, writeFile, stat, readdir, realpath } from "node:fs/promises";
 import { watchFile, unwatchFile } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { exec } from "node:child_process";
@@ -99,9 +99,8 @@ interface SubmitBody {
 interface Artifact {
   path: string;
   dir: string;
-  token: string;
-  port: number;
-  server: Server;
+  /** URL prefix for this artifact (for example "/report.html"). */
+  route: string;
   rawHash: string;
   markdown: boolean;
   marpCache?: { hash?: string; page?: string };
@@ -109,7 +108,6 @@ interface Artifact {
   vIndex: number;
   clients: Set<ServerResponse>;
   keepalive: NodeJS.Timeout;
-  shutdown: () => void;
 }
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -143,12 +141,11 @@ const CONTENT_TYPES: Record<string, string> = {
 // excludes dotfiles, source-env files, archives, etc. as a mild localhost guard.
 const SERVEABLE_EXTENSIONS = new Set(Object.keys(CONTENT_TYPES));
 
-let active: Artifact | null = null;
-
 // Annotations submitted from the browser, plus the artifact hash at submit
 // time. Used to correlate agent_settled events with browser-originated work
-// and to detect whether the agent actually changed the file.
-let pendingSubmits: { snapshotHash: string; kind: "edit" | "explain" }[] = [];
+// and to detect whether the agent actually changed the file. Each entry keeps
+// its own artifact so several open files can be waiting at once.
+let pendingSubmits: { artifact: Artifact; snapshotHash: string; kind: "edit" | "explain" }[] = [];
 
 // Last assistant text is accumulated so the browser can show a short
 // explanation when the agent finishes without changing the file.
@@ -212,12 +209,13 @@ function readBody(req: IncomingMessage, limitBytes: number): Promise<string> {
   });
 }
 
-function tokenOk(req: IncomingMessage, artifact: Artifact): boolean {
+function tokenOk(req: IncomingMessage): boolean {
+  if (!serverToken) return false;
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
   const fromQuery = url.searchParams.get("t");
   const cookieHeader = req.headers.cookie ?? "";
   const fromCookie = /(?:^|;\s*)hme_token=([^;]+)/.exec(cookieHeader)?.[1];
-  return fromQuery === artifact.token || fromCookie === artifact.token;
+  return fromQuery === serverToken || fromCookie === serverToken;
 }
 
 function resolveStatic(artifact: Artifact, pathname: string): string | null {
@@ -235,8 +233,81 @@ function resolveStatic(artifact: Artifact, pathname: string): string | null {
   return target;
 }
 
-function injectEditor(html: string, token: string, markdown: boolean): string {
-  const tag = `<script src="/__editor/editor.js?t=${token}${markdown ? "&md=1" : ""}" data-hme-editor></script>`;
+/** Split "/<route>/<rest>" into its route prefix and the remaining path. */
+function splitRoute(pathname: string): { route: string; rest: string } | null {
+  if (!pathname.startsWith("/")) return null;
+  const next = pathname.indexOf("/", 1);
+  if (next === -1) return { route: pathname, rest: "" };
+  return { route: pathname.slice(0, next), rest: pathname.slice(next) };
+}
+
+/** The artifact whose tab issued this request, if the browser sent a Referer. */
+function refererArtifact(req: IncomingMessage): Artifact | undefined {
+  const referer = req.headers.referer;
+  if (!referer) return undefined;
+  try {
+    const split = splitRoute(new URL(referer).pathname);
+    return split ? artifactsByRoute.get(split.route) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Resolve a sibling asset (CSS, images, second pages) against the open
+ * artifacts. The Referer pins the request to the tab's own artifact when two
+ * open files share a filename; otherwise the first artifact that has it wins.
+ */
+async function readStaticAsset(pathname: string, req: IncomingMessage): Promise<{ data: Buffer; type: string } | null> {
+  const preferred = refererArtifact(req);
+  const candidates: Artifact[] = [];
+  if (preferred) candidates.push(preferred);
+  for (const art of artifactsByPath.values()) if (art !== preferred) candidates.push(art);
+  for (const art of candidates) {
+    const target = resolveStatic(art, pathname);
+    if (!target) continue;
+    const data = await readFile(target).catch(() => null);
+    if (data) return { data, type: CONTENT_TYPES[extname(target).toLowerCase()] ?? "application/octet-stream" };
+  }
+  return null;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** Landing page listing every open artifact, so a closed tab can be reopened. */
+function renderIndexPage(): string {
+  const open = [...artifactsByPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+  const rows = open
+    .map(
+      (art) =>
+        `<li><a href="${art.route}">${escapeHtml(basename(art.path))}</a><code>${escapeHtml(art.path)}</code>` +
+        `<span class="hint">${art.markdown ? "Markdown" : "HTML"}</span></li>`,
+    )
+    .join("");
+  const body = open.length
+    ? `<ul>${rows}</ul><p class="hint">Open another file with <code>/edit &lt;file&gt;</code> in pi; every open file keeps its own tab, history, and undo stack.</p>`
+    : `<p>No artifacts open. Run <code>/edit &lt;file&gt;</code> in pi.</p>`;
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><title>retouche · open artifacts</title>
+<style>
+  :root { color-scheme: dark light; }
+  body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 32px; background: #111318; color: #e6e8ee; }
+  h1 { font-size: 16px; font-weight: 600; margin: 0 0 16px; letter-spacing: .01em; }
+  ul { list-style: none; margin: 0 0 20px; padding: 0; }
+  li { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; border-bottom: 1px solid #23262e; }
+  a { color: #8ab4ff; text-decoration: none; font-weight: 600; }
+  a:hover { text-decoration: underline; }
+  code { color: #9aa3b2; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .hint { color: #6f7787; font-size: 12px; margin-left: auto; }
+  p.hint { margin-left: 0; }
+</style></head>
+<body><h1>retouche · open artifacts</h1>${body}</body></html>`;
+}
+
+function injectEditor(html: string, token: string, markdown: boolean, base: string): string {
+  const tag = `<script src="${base}/__editor/editor.js?t=${token}${markdown ? "&md=1" : ""}" data-hme-editor></script>`;
   const closeIdx = html.toLowerCase().lastIndexOf("</body>");
   if (closeIdx !== -1) return html.slice(0, closeIdx) + tag + html.slice(closeIdx);
   return html + tag;
@@ -349,38 +420,76 @@ function buildPrompt(artifact: Artifact, body: SubmitBody): SendPart[] {
 // Server lifecycle
 // ---------------------------------------------------------------------------
 
-async function startServer(filePath: string, ctx: ExtensionCommandContext): Promise<void> {
-  await stopServer();
+// One localhost server hosts every open artifact. Each artifact gets its own
+// route ("/report.html", disambiguated when basenames collide) and scopes its
+// API calls under that route ("/report.html/__submit"), so several files can
+// stay open in parallel, in different tabs, without killing each other.
 
-  const fullPath = resolve(ctx.cwd, filePath);
-  const fileStat = await stat(fullPath).catch(() => null);
-  if (!fileStat || !fileStat.isFile()) {
-    throw new Error(`Not a file: ${fullPath}`);
+let httpServer: Server | null = null;
+let httpPort = 0;
+let serverToken = "";
+
+const artifactsByPath = new Map<string, Artifact>();
+const artifactsByRoute = new Map<string, Artifact>();
+
+/** Pick a stable, readable route for a file, disambiguating basename collisions. */
+function routeFor(fullPath: string): string {
+  const name = basename(fullPath);
+  const candidates = [name, `${basename(dirname(fullPath))}-${name}`, `${hash(fullPath).slice(0, 8)}-${name}`];
+  for (const candidate of candidates) {
+    const route = "/" + encodeURIComponent(candidate);
+    if (!artifactsByRoute.has(route)) return route;
   }
+  let suffix = 2;
+  for (;;) {
+    const route = "/" + encodeURIComponent(`${hash(fullPath).slice(0, 8)}-${suffix}-${name}`);
+    if (!artifactsByRoute.has(route)) return route;
+    suffix += 1;
+  }
+}
 
-  const dir = dirname(fullPath);
+async function ensureServer(): Promise<{ port: number; token: string }> {
+  if (httpServer) return { port: httpPort, token: serverToken };
   const token = randomBytes(24).toString("hex");
-  const clients = new Set<ServerResponse>();
-
-  const server = createServer(async (req, res) => {
-    try {
-      await handleRequest(req, res, { path: fullPath, dir, token } as Artifact, clients);
-    } catch (err) {
-      sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
-    }
+  const server = createServer((req, res) => {
+    void handleRequest(req, res).catch((err) => {
+      if (!res.headersSent) sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      else res.end();
+    });
   });
-
   await new Promise<void>((resolveListen, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolveListen);
   });
-
   const address = server.address();
   if (typeof address !== "object" || !address) {
     server.close();
     throw new Error("Failed to bind local server");
   }
-  const port = address.port;
+  httpServer = server;
+  httpPort = address.port;
+  serverToken = token;
+  return { port: httpPort, token: serverToken };
+}
+
+async function openArtifact(filePath: string, ctx: ExtensionCommandContext): Promise<void> {
+  const requested = resolve(ctx.cwd, filePath);
+  const fullPath = await realpath(requested).catch(() => requested);
+  const fileStat = await stat(fullPath).catch(() => null);
+  if (!fileStat || !fileStat.isFile()) {
+    throw new Error(`Not a file: ${fullPath}`);
+  }
+
+  const { port, token } = await ensureServer();
+
+  // Re-opening the same file reuses its tab instead of resetting its history.
+  const already = artifactsByPath.get(fullPath);
+  if (already) {
+    const url = `http://127.0.0.1:${port}${already.route}?t=${token}`;
+    openBrowser(url);
+    ctx.ui.notify(`retouche: editing ${basename(already.path)} — ${url}`, "info");
+    return;
+  }
 
   // Cold read establishes the hash and the first version so the first
   // watchFile fire is not a "change".
@@ -390,52 +499,63 @@ async function startServer(filePath: string, ctx: ExtensionCommandContext): Prom
   } catch {
     initialContent = "";
   }
-  const rawHash = hash(initialContent);
 
+  const route = routeFor(fullPath);
   const artifact: Artifact = {
     path: fullPath,
-    dir,
-    token,
-    port,
-    server,
-    rawHash,
+    dir: dirname(fullPath),
+    route,
+    rawHash: hash(initialContent),
     markdown: isMarkdownPath(fullPath),
     versions: [initialContent],
     vIndex: 0,
-    clients,
-    keepalive: setInterval(() => broadcast(clients, ": ping\n\n"), 25000),
-    shutdown: () => stopServer(),
+    clients: new Set(),
+    keepalive: setInterval(() => broadcast(artifact.clients, ": ping\n\n"), 25000),
   };
-  active = artifact;
+  artifactsByPath.set(fullPath, artifact);
+  artifactsByRoute.set(route, artifact);
 
   let debounce: NodeJS.Timeout | null = null;
-  watchFile(fullPath, { interval: 250 }, async () => {
+  watchFile(fullPath, { interval: 250 }, () => {
     if (debounce) return;
     debounce = setTimeout(async () => {
       debounce = null;
+      if (artifactsByPath.get(fullPath) !== artifact) return;
       try {
         const content = await readFile(fullPath, "utf8");
-        const art = active;
-        if (!art) return;
         const nextHash = hash(content);
-        if (nextHash !== art.rawHash) {
-          art.rawHash = nextHash;
-          if (content !== art.versions[art.vIndex]) {
-            art.versions = art.versions.slice(0, art.vIndex + 1);
-            art.versions.push(content);
-            art.vIndex = art.versions.length - 1;
-          }
-          broadcastChanged(art, clients);
+        if (nextHash === artifact.rawHash) return;
+        artifact.rawHash = nextHash;
+        if (content !== artifact.versions[artifact.vIndex]) {
+          artifact.versions = artifact.versions.slice(0, artifact.vIndex + 1);
+          artifact.versions.push(content);
+          artifact.vIndex = artifact.versions.length - 1;
         }
+        broadcastChanged(artifact);
       } catch {
         /* file temporarily unreadable; ignore */
       }
     }, 150);
   });
 
-  const url = `http://127.0.0.1:${port}/${encodeURIComponent(basename(fullPath))}?t=${token}`;
+  const url = `http://127.0.0.1:${port}${route}?t=${token}`;
   openBrowser(url);
   ctx.ui.notify(`retouche: editing ${basename(fullPath)} — ${url}`, "info");
+}
+
+function closeArtifact(artifact: Artifact): void {
+  if (artifactsByPath.get(artifact.path) === artifact) artifactsByPath.delete(artifact.path);
+  if (artifactsByRoute.get(artifact.route) === artifact) artifactsByRoute.delete(artifact.route);
+  unwatchFile(artifact.path);
+  clearInterval(artifact.keepalive);
+  for (const res of artifact.clients) {
+    try {
+      res.end();
+    } catch {
+      /* ignore */
+    }
+  }
+  artifact.clients.clear();
 }
 
 function broadcast(clients: Set<ServerResponse>, data: string): void {
@@ -457,32 +577,25 @@ function historyState(art: Artifact): { canUndo: boolean; canRedo: boolean; inde
   };
 }
 
-function broadcastChanged(art: Artifact, clients: Set<ServerResponse>): void {
-  broadcast(clients, `data: ${JSON.stringify({ type: "changed", ...historyState(art) })}\n\n`);
+function broadcastChanged(art: Artifact): void {
+  broadcast(art.clients, `data: ${JSON.stringify({ type: "changed", ...historyState(art) })}\n\n`);
 }
 
+/** Close every artifact and shut the localhost server down. */
 async function stopServer(): Promise<void> {
-  const current = active;
-  if (!current) return;
-  active = null;
+  for (const artifact of [...artifactsByPath.values()]) closeArtifact(artifact);
 
-  unwatchFile(current.path);
-
-  for (const res of current.clients) {
-    try {
-      res.end();
-    } catch {
-      /* ignore */
-    }
-  }
-  current.clients.clear();
-  clearInterval(current.keepalive);
+  const server = httpServer;
+  httpServer = null;
+  serverToken = "";
+  httpPort = 0;
+  if (!server) return;
 
   await new Promise<void>((resolveClose) => {
-    current.server.close(() => resolveClose());
+    server.close(() => resolveClose());
     // Force-close lingering keep-alive sockets after a grace period.
     setTimeout(() => {
-      (current.server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
+      (server as unknown as { closeAllConnections?: () => void }).closeAllConnections?.();
       resolveClose();
     }, 500);
   });
@@ -514,48 +627,60 @@ async function renderArtifactHtml(artifact: Artifact, raw: string): Promise<stri
   return raw;
 }
 
-async function handleRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-  artifact: Artifact,
-  clients: Set<ServerResponse>,
-): Promise<void> {
+async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
   const pathname = url.pathname;
-  const artifactPath = "/" + encodeURIComponent(basename(artifact.path));
 
-  // Every route requires the token: the document root is opened with it in
-  // the query string and sets a cookie so that same-origin asset requests
-  // (which carry the cookie but no query token) still pass.
-  if (!tokenOk(req, artifact)) {
+  // Every route requires the token: a document is opened with it in the query
+  // string and sets a cookie so that same-origin asset requests (which carry
+  // the cookie but no query token) still pass.
+  if (!tokenOk(req)) {
     sendJson(res, 403, { error: "forbidden" });
     return;
   }
 
-  // Root: serve the artifact with the editor injected. Also served at
-  // /<filename> so the URL shows which file is being edited.
-  if ((pathname === "/" || pathname === artifactPath) && req.method === "GET") {
+  // The page lives at "/<route>"; its API lives at "/<route>/__...".
+  const split = splitRoute(pathname);
+  const artifact = split ? artifactsByRoute.get(split.route) : undefined;
+  const rest = split?.rest ?? "";
+
+  // Document page.
+  if (artifact && rest === "" && req.method === "GET") {
     const raw = await readFile(artifact.path, "utf8").catch(() => null);
     if (raw === null) {
       sendJson(res, 404, { error: "artifact unavailable" });
       return;
     }
-    res.setHeader("Set-Cookie", `hme_token=${artifact.token}; HttpOnly; SameSite=Lax; Path=/`);
+    res.setHeader("Set-Cookie", `hme_token=${serverToken}; HttpOnly; SameSite=Lax; Path=/`);
     // Keep the access token out of the address bar: once the cookie is set,
-    // redirect the tokenized URL to the clean /<filename> URL.
+    // redirect the tokenized URL to the clean route.
     if (url.searchParams.has("t")) {
-      res.writeHead(302, { Location: artifactPath });
+      res.writeHead(302, { Location: artifact.route });
       res.end();
       return;
     }
     const page = await renderArtifactHtml(artifact, raw);
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(injectEditor(page, artifact.token, isMarkdownPath(artifact.path)));
+    res.end(injectEditor(page, serverToken, isMarkdownPath(artifact.path), artifact.route));
+    return;
+  }
+
+  // Index of everything currently open. Cookie-authenticated, so a saved
+  // http://127.0.0.1:<port>/ keeps working even after a tab is closed.
+  if (pathname === "/" && req.method === "GET") {
+    res.setHeader("Set-Cookie", `hme_token=${serverToken}; HttpOnly; SameSite=Lax; Path=/`);
+    if (url.searchParams.has("t")) {
+      res.writeHead(302, { Location: "/" });
+      res.end();
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(renderIndexPage());
     return;
   }
 
   // Raw artifact source (no injection) — used by the client on refresh.
-  if (pathname === "/__source" && req.method === "GET") {
+  if (artifact && rest === "/__source" && req.method === "GET") {
     const raw = await readFile(artifact.path, "utf8").catch(() => null);
     if (raw === null) {
       sendJson(res, 404, { error: "artifact unavailable" });
@@ -569,18 +694,14 @@ async function handleRequest(
 
   // Version history: real file-level undo/redo. The file on disk stays the
   // single source of truth; every external change is pushed as a version.
-  if (pathname === "/__history" && req.method === "GET") {
-    sendJson(res, 200, active ? historyState(active) : { canUndo: false, canRedo: false, index: 0, length: 1 });
+  if (artifact && rest === "/__history" && req.method === "GET") {
+    sendJson(res, 200, historyState(artifact));
     return;
   }
 
-  if ((pathname === "/__undo" || pathname === "/__redo") && req.method === "POST") {
-    const art = active;
-    if (!art) {
-      sendJson(res, 503, { error: "editor unavailable" });
-      return;
-    }
-    const step = pathname === "/__undo" ? -1 : 1;
+  if (artifact && (rest === "/__undo" || rest === "/__redo") && req.method === "POST") {
+    const art = artifact;
+    const step = rest === "/__undo" ? -1 : 1;
     const next = art.vIndex + step;
     if (next < 0 || next >= art.versions.length) {
       sendJson(res, 409, { error: step < 0 ? "nothing to undo" : "nothing to redo" });
@@ -596,7 +717,7 @@ async function handleRequest(
       return;
     }
     art.rawHash = hash(content);
-    broadcastChanged(art, clients);
+    broadcastChanged(art);
     notifySession(
       step < 0
         ? `User undid a change to ${basename(art.path)} in the visual editor.`
@@ -609,7 +730,7 @@ async function handleRequest(
   // Direct text replacement (the "Edit" quick action) — no agent involved.
   // Finds the selected text verbatim in the source and swaps it for the user's
   // new text. The file watcher records the version and broadcasts the change.
-  if (pathname === "/__replace" && req.method === "POST") {
+  if (artifact && rest === "/__replace" && req.method === "POST") {
     const rawBody = await readBody(req, 4 * 1024 * 1024);
     let body: { oldText?: unknown; newText?: unknown; anchorText?: unknown; startOffset?: unknown; slide?: unknown };
     try {
@@ -627,7 +748,7 @@ async function handleRequest(
       sendJson(res, 400, { error: "oldText required" });
       return;
     }
-    const targetPath = active?.path ?? artifact.path;
+    const targetPath = artifact.path;
     let content: string;
     try {
       content = await readFile(targetPath, "utf8");
@@ -674,21 +795,21 @@ async function handleRequest(
   }
 
   // Editor client script.
-  if (pathname === "/__editor/editor.js" && req.method === "GET") {
+  if (artifact && rest === "/__editor/editor.js" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" });
     res.end(await readFile(join(__dirname, "dist", "editor.js"), "utf8"));
     return;
   }
 
   // Vendored rasterizer.
-  if (pathname === "/__editor/html-to-image.js" && req.method === "GET") {
+  if (artifact && rest === "/__editor/html-to-image.js" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-store" });
     res.end(await readFile(join(ASSET_DIR, "html-to-image.js"), "utf8"));
     return;
   }
 
   // Server-sent events for file-change notifications.
-  if (pathname === "/__events" && req.method === "GET") {
+  if (artifact && rest === "/__events" && req.method === "GET") {
     res.writeHead(200, {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
@@ -696,13 +817,13 @@ async function handleRequest(
       "X-Accel-Buffering": "no",
     });
     res.write("retry: 3000\n\n");
-    clients.add(res);
-    req.on("close", () => clients.delete(res));
+    artifact.clients.add(res);
+    req.on("close", () => artifact.clients.delete(res));
     return;
   }
 
   // Annotation submissions.
-  if (pathname === "/__submit" && req.method === "POST") {
+  if (artifact && rest === "/__submit" && req.method === "POST") {
     const raw = await readBody(req, 20 * 1024 * 1024);
     let body: SubmitBody;
     try {
@@ -731,7 +852,7 @@ async function handleRequest(
       // below is what tells the browser whether an edit actually happened.
       const snapshotHash = await hashFile(artifact.path);
       piRef.sendUserMessage(buildPrompt(artifact, body), { deliverAs: "followUp" });
-      pendingSubmits.push({ snapshotHash, kind: body.kind === "explain" ? "explain" : "edit" });
+      pendingSubmits.push({ artifact, snapshotHash, kind: body.kind === "explain" ? "explain" : "edit" });
       sendJson(res, 200, { ok: true });
     } catch (err) {
       sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
@@ -739,22 +860,16 @@ async function handleRequest(
     return;
   }
 
-  // Static sibling assets referenced by the artifact.
+  // Static sibling assets referenced by an open artifact (styles, images,
+  // linked pages). The Referer pins the request to the tab's own artifact when
+  // several open files share a filename.
   if (req.method === "GET") {
-    const target = resolveStatic(artifact, pathname);
-    if (target) {
-      const data = await readFile(target).catch(() => null);
-      if (data) {
-        res.writeHead(200, {
-          "Content-Type": CONTENT_TYPES[extname(target).toLowerCase()] ?? "application/octet-stream",
-          "Cache-Control": "no-cache",
-        });
-        res.end(data);
-        return;
-      }
+    const file = await readStaticAsset(pathname, req);
+    if (file) {
+      res.writeHead(200, { "Content-Type": file.type, "Cache-Control": "no-cache" });
+      res.end(file.data);
+      return;
     }
-    sendJson(res, 404, { error: "not found" });
-    return;
   }
 
   sendJson(res, 404, { error: "not found" });
@@ -782,8 +897,11 @@ export default function (pi: ExtensionAPI) {
   pi.on("agent_settled", async () => {
     if (pendingSubmits.length === 0) return;
     const pending = pendingSubmits.shift();
-    if (!active || !pending) return;
-    const currentHash = await hashFile(active.path);
+    if (!pending) return;
+    const artifact = pending.artifact;
+    // The tab may have been closed while the agent was working.
+    if (artifactsByPath.get(artifact.path) !== artifact) return;
+    const currentHash = await hashFile(artifact.path);
     const edited = currentHash !== "" && currentHash !== pending.snapshotHash;
     const reply = lastAssistantText.slice(0, pending.kind === "explain" ? 6000 : 400);
     const payload = JSON.stringify({
@@ -793,7 +911,7 @@ export default function (pi: ExtensionAPI) {
       reply,
       replyHtml: pending.kind === "explain" ? getMarked().parse(reply, { gfm: true, breaks: false }) : undefined,
     });
-    broadcast(active.clients, `data: ${payload}\n\n`);
+    broadcast(artifact.clients, `data: ${payload}\n\n`);
   });
 
   pi.registerCommand("edit", {
@@ -814,7 +932,7 @@ export default function (pi: ExtensionAPI) {
         target = files[idx].path;
       }
       try {
-        await startServer(target, ctx);
+        await openArtifact(target, ctx);
       } catch (err) {
         ctx.ui.notify(`retouche: ${err instanceof Error ? err.message : String(err)}`, "error");
       }

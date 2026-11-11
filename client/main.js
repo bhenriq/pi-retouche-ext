@@ -11,6 +11,11 @@ import { CSS } from "./styles.js";
   var currentScript = document.currentScript;
   if (!currentScript) return;
   var scriptUrl = new URL(currentScript.src, location.href);
+  // The script is served from "<route>/__editor/editor.js"; the route prefix
+  // scopes every API call to this tab's artifact, so several files can be open
+  // at once on the same localhost server.
+  var BASE = scriptUrl.pathname.replace(/\/__editor\/editor\.js$/, "");
+  if (BASE === scriptUrl.pathname) BASE = "";
   var TOKEN = scriptUrl.searchParams.get("t") || "";
   var MD = scriptUrl.searchParams.get("md") === "1";
   if (!TOKEN) return;
@@ -347,7 +352,7 @@ import { CSS } from "./styles.js";
   }
 
   function historyAction(kind) {
-    fetch("/__" + kind + "?t=" + encodeURIComponent(TOKEN), { method: "POST" })
+    fetch(BASE + "/__" + kind + "?t=" + encodeURIComponent(TOKEN), { method: "POST" })
       .then(function (res) {
         return res
           .json()
@@ -368,7 +373,7 @@ import { CSS } from "./styles.js";
   }
 
   function refreshHistory() {
-    fetch("/__history?t=" + encodeURIComponent(TOKEN))
+    fetch(BASE + "/__history?t=" + encodeURIComponent(TOKEN))
       .then(function (res) {
         return res.ok ? res.json() : null;
       })
@@ -596,7 +601,7 @@ import { CSS } from "./styles.js";
     return new Promise(function (resolve, reject) {
       if (window.htmlToImage) return resolve();
       var s = document.createElement("script");
-      s.src = "/__editor/html-to-image.js?t=" + encodeURIComponent(TOKEN);
+      s.src = BASE + "/__editor/html-to-image.js?t=" + encodeURIComponent(TOKEN);
       s.onload = function () {
         resolve();
       };
@@ -676,7 +681,7 @@ import { CSS } from "./styles.js";
 
     work
       .then(function () {
-        return fetch("/__submit?t=" + encodeURIComponent(TOKEN), {
+        return fetch(BASE + "/__submit?t=" + encodeURIComponent(TOKEN), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -716,7 +721,7 @@ import { CSS } from "./styles.js";
       showToast("Timed out waiting for the file to update.", true);
     }, 15000);
 
-    fetch("/__replace?t=" + encodeURIComponent(TOKEN), {
+    fetch(BASE + "/__replace?t=" + encodeURIComponent(TOKEN), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ oldText: oldText, newText: newText, anchorText: anchorText, startOffset: startOffset, slide: slide }),
@@ -751,7 +756,7 @@ import { CSS } from "./styles.js";
   var applySeq = 0;
   function applySource() {
     var seq = ++applySeq;
-    fetch("/__source?t=" + encodeURIComponent(TOKEN))
+    fetch(BASE + "/__source?t=" + encodeURIComponent(TOKEN))
       .then(function (res) {
         if (!res.ok) throw new Error("source refused (" + res.status + ")");
         return res.text();
@@ -788,7 +793,7 @@ import { CSS } from "./styles.js";
   }
 
   function connect() {
-    var es = new EventSource("/__events?t=" + encodeURIComponent(TOKEN));
+    var es = new EventSource(BASE + "/__events?t=" + encodeURIComponent(TOKEN));
     es.onmessage = function (ev) {
       try {
         var msg = JSON.parse(ev.data);
