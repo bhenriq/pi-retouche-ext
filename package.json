@@ -12,7 +12,7 @@
     "build": "npm run build:client && npm run build:engine",
     "build:client": "esbuild client/main.js --bundle --format=iife --outfile=dist/editor.js",
     "build:engine": "esbuild lib/engine.ts --bundle --format=esm --platform=node --outfile=lib/engine.mjs",
-    "test": "node lib/matching.test.cjs"
+    "test": "node lib/matching.test.cjs && node lib/render.test.cjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",

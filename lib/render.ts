@@ -108,11 +108,12 @@ ${slides}
 }
 
 /**
- * Find local CSS files that define the deck's frontmatter theme and return
- * `--theme <file>` arguments so the Marp CLI renders with the same theme a
- * user would get from `marp deck.md --theme theme.css`.
+ * Find local CSS files that define the deck's frontmatter theme: a file named
+ * `<theme>.css`, or any `.css` in the deck's directory declaring
+ * `@theme <theme>`. A theme that lives in another directory is not found, and
+ * Marp then renders with its default theme.
  */
-export async function marpThemeArgs(raw: string, filePath: string): Promise<string[]> {
+export async function marpThemeFiles(raw: string, filePath: string): Promise<string[]> {
   const theme = marpTheme(raw);
   if (!theme || ["default", "gaia", "uncover"].includes(theme)) return [];
   const dir = dirname(filePath);
@@ -139,9 +140,38 @@ export async function marpThemeArgs(raw: string, filePath: string): Promise<stri
     } catch {
       /* skip unreadable files */
     }
-    if (namedFile || declaresTheme) out.push("--theme", p);
+    if (namedFile || declaresTheme) out.push(p);
   }
   return out;
+}
+
+/**
+ * `--theme <file>` arguments so the Marp CLI renders with the same theme a
+ * user would get from `marp deck.md --theme theme.css`.
+ */
+export async function marpThemeArgs(raw: string, filePath: string): Promise<string[]> {
+  const files = await marpThemeFiles(raw, filePath);
+  return files.flatMap((p) => ["--theme", p]);
+}
+
+/**
+ * The rendered page depends on the theme CSS as much as on the Markdown, so
+ * the theme contents belong in the cache key: editing a theme has to
+ * invalidate the page, otherwise a stale unthemed render keeps being served.
+ */
+async function themeFingerprint(files: string[]): Promise<string> {
+  let out = "";
+  for (const p of files) {
+    const text = await readFile(p, "utf8").catch(() => "");
+    out += `\u0000${p}\u0000${hash(text)}`;
+  }
+  return out;
+}
+
+/** Cache key for a rendered deck: the Markdown plus the theme it resolves to. */
+export async function marpRenderKey(raw: string, filePath: string): Promise<string> {
+  const files = await marpThemeFiles(raw, filePath);
+  return hash(raw + (await themeFingerprint(files)));
 }
 
 export async function renderMarpPage(
@@ -150,11 +180,12 @@ export async function renderMarpPage(
   marked: Marked,
   cache?: { hash?: string; page?: string } | null,
 ): Promise<string> {
-  const key = hash(raw);
+  const themeFiles = await marpThemeFiles(raw, filePath);
+  const key = await marpRenderKey(raw, filePath);
   if (cache && cache.hash === key) return cache.page;
   const tmp = await mkdtemp(join(tmpdir(), "retouche-marp-"));
   const out = join(tmp, "out.html");
-  const themeArgs = await marpThemeArgs(raw, filePath);
+  const themeArgs = themeFiles.flatMap((p) => ["--theme", p]);
   try {
     await execFileAsync("marp", [filePath, ...themeArgs, "--template", "bare", "--allow-local-files", "--no-stdin", "--output", out], { timeout: 30000 });
     const cliHtml = await readFile(out, "utf8");
